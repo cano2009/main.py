@@ -126,6 +126,8 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/objects/GroundProjectedEnv.js"></script>
+<script src="cropatlas.js"></script>
 <script src="crops.js"></script>
 <script src="station.js"></script>
 <script>
@@ -165,19 +167,59 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   sg.fillStyle = grad; sg.fillRect(0, 0, 2, 256);
   const skyTex = new THREE.CanvasTexture(sky); skyTex.encoding = THREE.sRGBEncoding;
   scene.background = skyTex;
-  scene.fog = new THREE.Fog(new THREE.Color('#cdbf98'), 14, 60);
 
   const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 180);
   const controls = new THREE.OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true; controls.enablePan = false;
   controls.maxPolarAngle = Math.PI * 0.49;
 
-  scene.add(new THREE.HemisphereLight(new THREE.Color('#cfe0f0'), new THREE.Color('#5a4630'), 0.75));
+  const hemi = new THREE.HemisphereLight(new THREE.Color('#cfe0f0'), new THREE.Color('#5a4630'), 0.75);
+  scene.add(hemi);
   const sun = new THREE.DirectionalLight(new THREE.Color('#fff1d6'), 2.4);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
   sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.015;
   scene.add(sun); scene.add(sun.target);
+  // Real sky: a photographed HDR panorama lights the scene and fills the background; the sun is put where the
+  // panorama's sun is, so shadows and highlights line up with the sky.
+  let skyEnv = null;
+  // The panorama is stored as two PNGs (colour mantissa and a shared exponent) and rebuilt here at full range.
+  function loadSky(base, done) {
+    const il = new THREE.ImageLoader(), imgs = {};
+    const ready = () => {
+      if (!imgs.m || !imgs.e) return;
+      const W = imgs.m.width, H = imgs.m.height, px = (img) => { const c = document.createElement('canvas'); c.width = W; c.height = H; const x = c.getContext('2d'); x.drawImage(img, 0, 0); return x.getImageData(0, 0, W, H).data; };
+      const m = px(imgs.m), e = px(imgs.e), out = new Uint16Array(W * H * 4), toH = THREE.DataUtils.toHalfFloat;
+      for (let i = 0; i < W * H; i++) {
+        const f = Math.pow(2, e[i * 4] - 128) / 255;
+        out[i * 4] = toH(m[i * 4] * f); out[i * 4 + 1] = toH(m[i * 4 + 1] * f); out[i * 4 + 2] = toH(m[i * 4 + 2] * f); out[i * 4 + 3] = toH(1);
+      }
+      const t = new THREE.DataTexture(out, W, H, THREE.RGBAFormat, THREE.HalfFloatType);
+      t.flipY = true; t.magFilter = t.minFilter = THREE.LinearFilter; t.generateMipmaps = false; t.encoding = THREE.LinearEncoding; t.needsUpdate = true;
+      done(t);
+    };
+    il.load(base + '_m.png', (img) => { imgs.m = img; ready(); });
+    il.load(base + '_e.png', (img) => { imgs.e = img; ready(); });
+  }
+  if (window.FWCropAtlas) {
+    loadSky('sky_alps_field', (hdr) => {
+      hdr.mapping = THREE.EquirectangularReflectionMapping;
+      const d = hdr.image.data, W = hdr.image.width, H = hdr.image.height;
+      let best = -1, bx = 0, by = 0;
+      for (let y = 0; y < H / 2; y += 2) for (let x = 0; x < W; x += 2) { const i = (y * W + x) * 4, h = THREE.DataUtils.fromHalfFloat, l = h(d[i]) * 0.2126 + h(d[i + 1]) * 0.7152 + h(d[i + 2]) * 0.0722; if (l > best) { best = l; bx = x; by = y; } }
+      const u = (bx + 0.5) / W, v = 1 - (by + 0.5) / H, phi = (u - 0.5) * Math.PI * 2, lat = (v - 0.5) * Math.PI;
+      sunDir.set(Math.cos(phi) * Math.cos(lat), Math.max(0.25, Math.sin(lat)), Math.sin(phi) * Math.cos(lat)).normalize();
+      const pm = new THREE.PMREMGenerator(renderer); skyEnv = pm.fromEquirectangular(hdr).texture; pm.dispose();
+      scene.environment = skyEnv;
+      if (THREE.GroundProjectedEnv) {
+        const dome = new THREE.GroundProjectedEnv(hdr); dome.scale.setScalar(120); dome.height = 2.2; dome.radius = 120;
+        scene.add(dome); scene.background = null; ground.visible = false;
+      } else scene.background = hdr;
+      hemi.intensity = 0.12; sun.intensity = 2.6;
+      build();
+    });
+  }
+  const sunDir = new THREE.Vector3(0.55, 0.75, 0.4).normalize();
   let envTex = null;
   function environment() {
     if (!envTex && THREE.RoomEnvironment) {
@@ -193,9 +235,29 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   const leafTex = new THREE.DataTexture(LT.data, LT.width, LT.height);
   leafTex.generateMipmaps = true; leafTex.minFilter = THREE.LinearMipmapLinearFilter; leafTex.magFilter = THREE.LinearFilter; leafTex.needsUpdate = true;
   const uTime = { value: 0 }, uWind = { value: 1 }, uH = { value: 0.9 }, uStiff = { value: 1 };
+  const uSunDirV = { value: new THREE.Vector3(0, 1, 0) }, uSunCol = { value: new THREE.Color('#fff1d6').multiplyScalar(2.6) };
+  const PHOTO = !!(window.FWCropAtlas && F.hasPhotoAtlas);
+  const texLoader = new THREE.TextureLoader();
+  const loadTex = (url, srgb, aniso) => { const t = texLoader.load(url); t.encoding = srgb ? THREE.sRGBEncoding : THREE.LinearEncoding; t.anisotropy = aniso || 8; return t; };
+  const atlasCol = PHOTO ? loadTex(window.FWCropAtlas.color, true) : null, atlasNor = PHOTO ? loadTex(window.FWCropAtlas.normal, false) : null;
   function cropMaterial(rough, wind) {
+    if (PHOTO) return F.makeMaterials({ map: atlasCol, normalMap: atlasNor, alphaTest: 0.5, colorBoost: 1.12, roughness: rough, key: wind ? 'w' : 's', onBeforeCompile: (sh, i) => leafShader(sh, i, wind) });
     return F.makeMaterials({ map: leafTex, colorBoost: LT.colorBoost, roughness: rough, onBeforeCompile: wind ? windShader : null });
   }
+  // Light passing through leaves: back-lit leaves glow, strongest looking toward the sun.
+  function leafShader(sh, i, wind) {
+    if (wind) windShader(sh);
+    if (i !== 0) return;
+    Object.assign(sh.uniforms, { uSunDirV, uSunCol });
+    sh.fragmentShader = 'uniform vec3 uSunDirV; uniform vec3 uSunCol;\n' + sh.fragmentShader.replace('#include <output_fragment>', `
+      vec3 Vd = normalize(vViewPosition);
+      float trans = pow(max(dot(-Vd, uSunDirV), 0.0), 3.0) * 0.55 + max(-dot(normal, uSunDirV), 0.0) * 0.3;
+      outgoingLight += diffuseColor.rgb * uSunCol * trans * 0.35;
+      #include <output_fragment>`);
+  }
+  // Shadows that follow the leaf outlines (and sway with the wind).
+  const leafDepth = PHOTO ? new THREE.MeshDepthMaterial({ depthPacking: THREE.RGBADepthPacking, map: atlasCol, alphaTest: 0.5 }) : null;
+  if (leafDepth) { leafDepth.onBeforeCompile = (sh) => windShader(sh); leafDepth.customProgramCacheKey = () => 'fwdepth'; }
   function windShader(sh) {
     {
       Object.assign(sh.uniforms, { uTime, uWind, uH, uStiff });
@@ -221,14 +283,22 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     const mk = (data, enc) => { const x = new THREE.DataTexture(data, t.width, t.height); x.wrapS = x.wrapT = THREE.RepeatWrapping; x.generateMipmaps = true; x.minFilter = THREE.LinearMipmapLinearFilter; x.magFilter = THREE.LinearFilter; x.anisotropy = 8; x.encoding = enc; x.needsUpdate = true; return x; };
     return { map: mk(t.albedo, THREE.sRGBEncoding), normal: mk(t.normal, THREE.LinearEncoding) };
   }
-  const SOIL = { wet: soilTex(false), dry: soilTex(true) };
+  function scanTex(name) {
+    const t = { map: loadTex(name + '_diff.jpg', true, 8), normal: loadTex(name + '_nor_gl.jpg', false, 8), rough: loadTex(name + '_rough.jpg', false, 8) };
+    Object.values(t).forEach((x) => { x.wrapS = x.wrapT = THREE.RepeatWrapping; });
+    return t;
+  }
+  const SOIL = PHOTO ? { wet: scanTex('soil_farm'), dry: scanTex('soil_dry_field') } : { wet: soilTex(false), dry: soilTex(true) };
   const soilMats = {};
   function soilMaterial(cond, size) {
     const k = (cond === 'dry' ? 'dry' : 'wet') + size;
     if (!soilMats[k]) {
       const s = cond === 'dry' ? SOIL.dry : SOIL.wet;
-      const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: cond === 'dry' ? 0.97 : 0.9, map: s.map.clone(), normalMap: s.normal.clone(), normalScale: new THREE.Vector2(1.1, 1.1) });
-      m.map.repeat.set(size / 1.1, size / 1.1); m.normalMap.repeat.copy(m.map.repeat); m.map.needsUpdate = m.normalMap.needsUpdate = true;
+      const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1, map: s.map.clone(), normalMap: s.normal.clone(), normalScale: new THREE.Vector2(1.2, 1.2) });
+      if (s.rough) m.roughnessMap = s.rough.clone();
+      const rep = PHOTO ? size / 1.6 : size / 1.1;
+      [m.map, m.normalMap, m.roughnessMap].forEach((x) => { if (!x) return; x.repeat.set(rep, rep); x.needsUpdate = true; });
+      m.envMapIntensity = 0.6;
       soilMats[k] = m;
     }
     return soilMats[k];
@@ -276,13 +346,13 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   const cache = new Map();
   function plantGeo(stage, cond, seed, stems, lod) {
     const k = ['p', state.crop, stage, cond, seed, stems || 0, lod || 0].join('|');
-    if (!cache.has(k)) cache.set(k, crop().clump({ stage, condition: cond, seed, stems, lod }));
+    if (!cache.has(k)) cache.set(k, crop().clump({ stage, condition: cond, seed, stems, lod, photo: PHOTO }));
     return cache.get(k);
   }
   function itemGeo(key, seed, dirty) {
     const k = ['i', key, seed, dirty].join('|');
     if (!cache.has(k)) {
-      const g = CROPS[key].produce({ seed, dirty });
+      const g = CROPS[key].produce({ seed, dirty, photo: PHOTO });
       const bb = g.boundingBox, cx = (bb.min.x + bb.max.x) / 2, cz = (bb.min.z + bb.max.z) / 2, h = bb.max.y - bb.min.y;
       g.translate(-cx, -bb.min.y - h / 2, -cz);
       g.userData.half = h / 2;
@@ -322,7 +392,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     group.add(soil(size, 110, Math.max(0.2, f.row * 0.5), state.cond));
     group.add(clods(size, 90, state.cond));
     const g = plantGeo(state.stage, state.cond, 3);
-    plantMesh = new THREE.Mesh(g, plantMat); plantMesh.castShadow = true; plantMesh.receiveShadow = true;
+    plantMesh = new THREE.Mesh(g, plantMat); plantMesh.castShadow = true; plantMesh.receiveShadow = true; if (leafDepth) plantMesh.customDepthMaterial = leafDepth;
     if (g.userData.face) plantMesh.rotation.y = g.userData.face - (Math.PI / 4 - 0.6);
     plantMesh.userData.liftTo = 0;
     group.add(plantMesh);
@@ -349,7 +419,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     const tmp = new THREE.Object3D();
     buckets.forEach((list, i) => {
       if (!list.length) return;
-      const im = new THREE.InstancedMesh(variants[i], plantMat, list.length);
+      const im = new THREE.InstancedMesh(variants[i], plantMat, list.length); if (leafDepth) im.customDepthMaterial = leafDepth;
       list.forEach((p, j) => {
         tmp.position.set(p[0], 0.02, p[1]); tmp.rotation.set(0, r() * Math.PI * 2, 0);
         const s = 0.9 + r() * 0.2; tmp.scale.set(s, s * (0.94 + r() * 0.12), s); tmp.updateMatrix();
@@ -518,7 +588,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     const v = state.view, C = crop();
     if (WS.built) WS.built.group.visible = v === 'washer';
     WS.itemsGroup.visible = v === 'washer';
-    scene.environment = v === 'washer' ? environment() : null;
+    scene.environment = skyEnv || (v === 'washer' ? environment() : null);
     let stats;
     if (v === 'plant') stats = buildPlant();
     else if (v === 'field') stats = buildField();
@@ -632,6 +702,8 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     const target = state.wind ? (state.cond === 'dry' ? 1.3 : 1) : 0;
     uWind.value += (target - uWind.value) * Math.min(1, dt * 3);
     uTime.value += dt;
+    sun.position.copy(sunDir).multiplyScalar(12).add(sun.target.position);
+    uSunDirV.value.copy(sunDir).transformDirection(camera.matrixWorldInverse);
     if (plantMesh) plantMesh.position.y += (plantMesh.userData.liftTo - plantMesh.position.y) * Math.min(1, dt * 5);
     if (produce && !reduceMotion) { produce.a.outer.rotation.y += dt * 0.4; produce.b.outer.rotation.y += dt * 0.4; }
     if (WS.built && state.view === 'washer') updateWasher(dt);

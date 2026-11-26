@@ -35,6 +35,14 @@
     return L(L(L(c(0, 0, 0), c(1, 0, 0), u), L(c(0, 1, 0), c(1, 1, 0), u), v), L(L(c(0, 0, 1), c(1, 0, 1), u), L(c(0, 1, 1), c(1, 1, 1), u), v), w);
   }
   const COND = { dry: '#a3925a', dryTip: '#8a6f43', lown: '#c9d273' };
+  // Photo leaf atlas (cropatlas.js). When a model is built with { photo: true }, leaves use real scanned leaves:
+  // the card's outline comes from the photo's alpha, the crop's colour tints the photo.
+  const ATLAS = root.FWCropAtlas || null;
+  const WHITE = new THREE.Color(1, 1, 1);
+  function photoTint(c, k) {
+    const m = Math.max(c.r, c.g, c.b) || 1;
+    return WHITE.clone().lerp(new THREE.Color(c.r / m, c.g / m, c.b / m), k === undefined ? 0.45 : k);
+  }
 
   // ---------------------------------------------------------------------------
   // Textures
@@ -130,10 +138,11 @@
 
   // ---------------------------------------------------------------------------
   // Geometry builder with material groups
-  function Builder(seed, spots, lod) { this.p = []; this.c = []; this.uv = []; this.idx = [[], [], [], []]; this.mat = 0; this.r = rng(seed); this.spots = spots; this.face = 0; this.lod = lod || 0; }
+  function Builder(seed, spots, lod, photo) { this.p = []; this.c = []; this.uv = []; this.idx = [[], [], [], []]; this.mat = 0; this.r = rng(seed); this.spots = spots; this.face = 0; this.lod = lod || 0; this.photo = !!(photo && ATLAS); }
   Builder.prototype.v = function (pos, col, u, v) {
     this.p.push(pos.x, pos.y, pos.z); this.c.push(col.r, col.g, col.b);
-    this.uv.push(u === undefined ? 0.985 : u, v === undefined ? 0.5 : v);
+    if (u === undefined && this.photo) this.uv.push(ATLAS.slots.neutral.u, ATLAS.slots.neutral.v);
+    else this.uv.push(u === undefined ? 0.985 : u, v === undefined ? 0.5 : v);
     return this.p.length / 3 - 1;
   };
   Builder.prototype.tri = function (a, b, c) { this.idx[this.mat].push(a, b, c); };
@@ -191,7 +200,8 @@
   // Leaf blade, five vertices across: raised midrib (fold), cupping (cup), margin ruffles (wave), teeth (serr).
   // colAt(t, part, x): part 0 left, 1 midrib, 2 right; x from -1 to 1 across the blade.
   function ribbon(b, curve, segs, width, lateral0, o) {
-    const reg = UVR[o.uv], N = 4;
+    const slot = b.photo ? ATLAS.slots[o.slot || 'grass'] : null, tintLeaf = slot && o.slot && o.slot !== 'grass';
+    const reg = slot ? null : UVR[o.uv], N = 4;
     let prev = null;
     for (let s = 0; s <= segs; s++) {
       const t = s / segs, P = curve.getPoint(t), T = curve.getTangent(t);
@@ -207,7 +217,10 @@
         const off = fold * (1 - Math.pow(ax, 1.3)) + cup * x * x + wv;
         const pos = P.clone().addScaledVector(S, w * x).addScaledVector(W, off);
         const part = j === 2 ? 1 : j < 2 ? 0 : 2;
-        row.push(b.v(pos, o.colAt(t, part, x), reg ? reg[0] + (reg[1] - reg[0]) * j / N : undefined, t));
+        let col = o.colAt(t, part, x);
+        if (tintLeaf) col = photoTint(col, o.tint);
+        if (slot) row.push(b.v(pos, col, slot.u0 + (slot.u1 - slot.u0) * j / N, slot.v0 + (slot.v1 - slot.v0) * t));
+        else row.push(b.v(pos, col, reg ? reg[0] + (reg[1] - reg[0]) * j / N : undefined, t));
       }
       if (prev) for (let j = 0; j < N; j++) { b.tri(prev[j], prev[j + 1], row[j]); b.tri(prev[j + 1], row[j + 1], row[j]); }
       prev = row;
@@ -254,9 +267,10 @@
     });
   }
   function diamond(b, c, dir, perp, len, wid, col, colTip) {
-    const base = b.v(c, col, 0.73, 0), tip = b.v(c.clone().addScaledVector(dir, len), colTip, 0.73, 1);
+    const ph = b.photo, U = (u) => (ph ? undefined : u), Vv = (v) => (ph ? undefined : v);
+    const base = b.v(c, col, U(0.73), Vv(0)), tip = b.v(c.clone().addScaledVector(dir, len), colTip, U(0.73), Vv(1));
     const m = c.clone().addScaledVector(dir, len * 0.42);
-    const l = b.v(m.clone().addScaledVector(perp, -wid), col, 0.52, 0.42), r = b.v(m.clone().addScaledVector(perp, wid), col, 0.94, 0.42);
+    const l = b.v(m.clone().addScaledVector(perp, -wid), col, U(0.52), Vv(0.42)), r = b.v(m.clone().addScaledVector(perp, wid), col, U(0.94), Vv(0.42));
     b.tri(base, l, tip); b.tri(base, tip, r);
   }
   function leafCurve(node, D, L, erect, droop) {
@@ -269,10 +283,11 @@
     const up = o.tilt === undefined ? 0.3 : o.tilt, dr = o.droop || 0;
     const pt = (f, h) => start.clone().addScaledVector(dir, L * f).addScaledVector(Y, L * h);
     const curve = Curve([start.clone(), pt(0.33, up * 0.45 + 0.02), pt(0.66, up * 0.72 - dr * 0.22), pt(1.0, up * 0.78 - dr * 0.62)]);
-    const lob = o.lobes, wf = o.width || ((t) => Math.pow(Math.sin(Math.PI * (0.08 + 0.92 * t)), 0.7));
-    const vein = o.vein || null;
-    ribbon(b, curve, o.segs || 7, (t) => W * wf(t) * (lob ? 1 + lob[1] * Math.sin(t * Math.PI * lob[0]) : 1), flatSide(dir), {
-      uv: 'broad', fold: o.fold === undefined ? 0.1 : o.fold, cup: o.cup === undefined ? 0.25 : o.cup, wave: o.wave, waveGrow: o.waveGrow, serr: o.serr, twist: o.twist || 0,
+    const photo = b.photo && o.slot, lob = photo ? null : o.lobes, wf = o.width || ((t) => Math.pow(Math.sin(Math.PI * (0.08 + 0.92 * t)), 0.7));
+    const vein = photo ? null : o.vein || null;
+    const widthFn = photo ? () => L * ATLAS.slots[o.slot].aspect * 0.5 * (o.photoScale || 1) : (t) => W * wf(t) * (lob ? 1 + lob[1] * Math.sin(t * Math.PI * lob[0]) : 1);
+    ribbon(b, curve, o.segs || 7, widthFn, flatSide(dir), {
+      uv: 'broad', slot: photo ? o.slot : null, tint: o.tint, fold: photo ? 0.04 : o.fold === undefined ? 0.1 : o.fold, cup: o.cup === undefined ? 0.25 : o.cup, wave: o.wave, waveGrow: o.waveGrow, serr: photo ? null : o.serr, twist: o.twist || 0,
       colAt: (t, part, x) => {
         const c = shade(b, o.pal[0], o.pal[1], t, o.age || 0, o.cond);
         if (part === 1) return vein ? c.lerp(hex(vein), 0.55) : c.multiplyScalar(1.07);
@@ -301,8 +316,9 @@
     tube(b, curve, 4, 4, (t) => 0.0019 * (1 - 0.5 * t), (t) => shade(b, pal.stem, pal.stemTip, t, age * 0.4, cond === 'rust' ? 'healthy' : cond));
     const leaflet = (P, dir, ll) => {
       const c = Curve([P.clone(), P.clone().addScaledVector(dir, ll * 0.5).addScaledVector(Y, ll * 0.06), P.clone().addScaledVector(dir, ll).addScaledVector(Y, -ll * (0.15 + droop * 0.3))]);
-      ribbon(b, c, 4, (t) => ll * 0.36 * Math.pow(Math.sin(Math.PI * (0.12 + 0.88 * t)), 0.8), flatSide(dir), {
-        uv: 'broad', fold: 0.12, cup: 0.18 + (cond === 'dry' ? 0.5 : 0), wave: [18, ll * 0.035, 2], serr: pal.serr || [9, 0.12],
+      const ph = b.photo && pal.photo;
+      ribbon(b, c, 4, ph ? () => ll * ATLAS.slots[pal.photo].aspect * 0.55 : (t) => ll * 0.36 * Math.pow(Math.sin(Math.PI * (0.12 + 0.88 * t)), 0.8), flatSide(dir), {
+        uv: 'broad', slot: ph ? pal.photo : null, fold: ph ? 0.05 : 0.12, cup: 0.18 + (cond === 'dry' ? 0.5 : 0), wave: [18, ll * 0.035, 2], serr: ph ? null : pal.serr || [9, 0.12],
         colAt: (t, part) => { const k = shade(b, pal.leaf, pal.tip, t, age, cond); return part === 1 ? k.multiplyScalar(1.12) : k; }
       });
     };
@@ -327,8 +343,8 @@
     const stem = Curve([new V3(0, -0.004, 0), new V3(0.002, H * 0.5, 0), new V3(0, H, 0.002)]);
     b.as(MAT.MATTE, () => tube(b, stem, 4, 5, (t) => (o.stemR || 0.0022) * (1 - 0.3 * t), (t) => plain(b, o.stemCol || '#7fa64e', o.stemCol || '#7fa64e', t)));
     const top = stem.getPoint(1);
-    for (let k = 0; k < 2; k++) blade(b, top, dirOf(az0 + k * Math.PI), o.cot[0], o.cot[1], { tilt: 0.25, droop: cond === 'dry' ? 0.6 : 0.1, cup: 0.3, pal: o.cotPal || ['#79b350', '#93c565'], cond, segs: 5 });
-    if (o.trueL) blade(b, top.clone().addScaledVector(Y, 0.003), dirOf(az0 + Math.PI / 2), o.trueL, o.trueL * (o.trueW || 0.6), { tilt: 0.7, droop: 0.05, cup: 0.35, pal, cond, lobes: o.lobes, serr: o.serr, segs: 6 });
+    for (let k = 0; k < 2; k++) blade(b, top, dirOf(az0 + k * Math.PI), o.cot[0], o.cot[1], { tilt: 0.25, droop: cond === 'dry' ? 0.6 : 0.1, cup: 0.3, pal: o.cotPal || ['#79b350', '#93c565'], cond, segs: 5, slot: 'lettuce', photoScale: 0.9 });
+    if (o.trueL) blade(b, top.clone().addScaledVector(Y, 0.003), dirOf(az0 + Math.PI / 2), o.trueL, o.trueL * (o.trueW || 0.6), { tilt: 0.7, droop: 0.05, cup: 0.35, pal, cond, lobes: o.lobes, serr: o.serr, segs: 6, slot: o.slot, photoScale: o.photoScale });
   }
   function dirtify(b, start, amount) {
     let minY = Infinity, maxY = -Infinity, minX = Infinity, maxX = -Infinity;
@@ -447,7 +463,7 @@
   function wheatClump(o) {
     const stage = o.stage | 0, cond = o.condition || 'healthy', seed = o.seed || 1, lod = o.lod || 0;
     const stems = o.stems || (stage === 0 ? 1 : stage === 1 ? 2 : stage === 2 ? 4 : 5);
-    const b = new Builder(seed * 7919 + stage * 131 + cond.length, { rate: 0.3, a: '#c47a2a', b: '#8d4f1c' }, lod);
+    const b = new Builder(seed * 7919 + stage * 131 + cond.length, { rate: 0.3, a: '#c47a2a', b: '#8d4f1c' }, lod, o.photo);
     for (let s = 0; s < stems; s++) {
       const a = (s / stems) * Math.PI * 2 + b.r(), d = stems > 1 ? 0.01 + b.r() * 0.02 : 0;
       wheatStem(b, new V3(Math.cos(a) * d, 0, Math.sin(a) * d), stage, cond);
@@ -651,6 +667,12 @@
   }
   function carrotFrond(b, crown, D, L, erect, droop, age, cond, pairs) {
     const curve = leafCurve(crown, D, L, erect, droop);
+    if (b.photo) {
+      const w = L * ATLAS.slots.carrot.aspect * 0.5 * 1.15, lat = flatSide(D);
+      ribbon(b, curve, 8, () => w, lat, { slot: 'carrot', tint: 0.6, fold: 0.02, cup: 0.18, twist: (b.r() - 0.5) * 0.8, colAt: (t) => shade(b, KP.frond, KP.frondTip, t, age, cond) });
+      if (L > 0.12) ribbon(b, curve, 8, () => w * 0.8, lat.clone().applyAxisAngle(D, 1.1), { slot: 'carrot', tint: 0.6, fold: 0.02, cup: 0.1, colAt: (t) => shade(b, KP.frond, KP.frondTip, t, age, cond).multiplyScalar(0.92) });
+      return;
+    }
     tube(b, curve, 4, 3, (t) => (0.0011 + 0.0005 * L / 0.28) * (1 - 0.6 * t), (t) => shade(b, KP.pet, KP.petTip, t, age * 0.5, cond === 'rust' ? 'healthy' : cond));
     const lf = (P, dir, len, wid, t) => diamond(b, P, dir, flatSide(dir), len, wid, shade(b, KP.frond, KP.frond, t, age, cond), shade(b, KP.frondTip, KP.frondTip, t, age, cond));
     // tripinnate: each pinna is a short stalk with three lobed leaflets, each split again
@@ -751,7 +773,7 @@
       tomatoFruit(b, ctr, R, col[0], col[1]);
     });
   }
-  const TPAL = { leaf: TP.leaf, tip: TP.tip, stem: TP.stem, stemTip: TP.stemTip, serr: [11, 0.16] };
+  const TPAL = { leaf: TP.leaf, tip: TP.tip, stem: TP.stem, stemTip: TP.stemTip, serr: [11, 0.16], photo: 'tomato' };
   function tomatoPlant(b, stage, cond) {
     const r = b.r, sc = cond === 'lown' ? 0.85 : 1, dry = cond === 'dry', az0 = r() * Math.PI * 2;
     if (stage === 0) { seedling(b, az0, 0.05, [TP.leaf, TP.tip], cond, { cot: [0.032, 0.009], stemCol: TP.stem }); compoundLeaf(b, new V3(0, 0.054, 0), dirOf(az0 + 1.57), 0.05, 0.1, 0, cond, TPAL, 1); return; }
@@ -816,7 +838,7 @@
   }
   function vinePlant(b, stage, cond, o) {
     const r = b.r, sc = cond === 'lown' ? 0.85 : 1, dry = cond === 'dry', az0 = r() * Math.PI * 2;
-    if (stage === 0) { seedling(b, az0, 0.04, o.pal, cond, { cot: [0.026, 0.013], trueL: 0.035, trueW: 0.8, lobes: o.lobes, serr: o.serr, stemCol: o.vine }); return null; }
+    if (stage === 0) { seedling(b, az0, 0.04, o.pal, cond, { cot: [0.026, 0.013], trueL: 0.035, trueW: 0.8, lobes: o.lobes, serr: o.serr, stemCol: o.vine, slot: o.slot, photoScale: o.photoScale }); return null; }
     const nR = [0, 2, 3, 4, 4][stage], lenR = o.lens[stage] * sc, runners = [];
     b.as(MAT.MATTE, () => tube(b, Curve([new V3(0, -0.01, 0), new V3(0, 0.02, 0), new V3(0, 0.03, 0.005)]), 2, 6, () => 0.008, () => plain(b, o.vine)));
     for (let j = 0; j < nR; j++) {
@@ -832,7 +854,7 @@
         const age = stage === 4 && o.dieBack ? 1 - t * 0.5 : 1 - t;
         const pal = stage === 4 && o.dieBack && r() < 0.4 ? ['#8d8a3c', '#a49650'] : o.pal;
         blade(b, top, ld, o.leafL * sc * (t < 0.2 ? 0.8 : 1) * (0.85 + 0.3 * r()), o.leafW * sc, {
-          tilt: 0.35, droop: 0.3 + (dry ? 0.5 : 0), cup: o.cup || 0.25, lobes: o.lobes, width: o.width, serr: o.serr, wave: [22, 0.004, 2], pal, age, cond, segs: 10, vein: o.vein
+          tilt: 0.35, droop: 0.3 + (dry ? 0.5 : 0), cup: o.cup || 0.25, lobes: o.lobes, width: o.width, serr: o.serr, wave: [22, 0.004, 2], pal, age, cond, segs: 10, vein: o.vein, slot: o.slot, photoScale: o.photoScale
         });
         if (q % 2 === 0) tendril(b, P.clone().addScaledVector(Y, 0.01), dirOf(az - side * 0.8), 0.09, o.vine);
         if (stage >= 2 && q === 1 && j < 3) flower(b, P.clone().addScaledVector(Y, 0.03).addScaledVector(ld, -0.03), o.flowerSize, o.flower[0], o.flower[1], 0.45);
@@ -842,9 +864,9 @@
   }
   function melonPlant(b, stage, cond) {
     const runners = vinePlant(b, stage, cond, {
-      pal: [MP.leaf, MP.tip], vine: MP.vine, lens: [0, 0.5, 1.1, 1.5, 1.7], spacing: 0.18, petH: 0.08, leafL: 0.14, leafW: 0.08, cup: 0.15,
+      pal: [MP.leaf, MP.tip], vine: MP.vine, lens: [0, 0.5, 1.1, 1.5, 1.7], spacing: 0.16, petH: 0.09, leafL: 0.19, leafW: 0.08, cup: 0.15,
       width: (t) => Math.pow(Math.sin(Math.PI * (0.06 + 0.94 * t)), 0.7) * (0.32 + 0.68 * Math.pow(Math.abs(Math.sin(t * Math.PI * 2.5)), 0.55)),
-      vein: '#a9c98a', flower: ['#f0d33a', '#d9a520'], flowerSize: 0.022
+      vein: '#a9c98a', flower: ['#f0d33a', '#d9a520'], flowerSize: 0.022, slot: 'melon', photoScale: 1.5
     });
     if (!runners || stage < 3) return;
     const sc = cond === 'lown' ? 0.85 : 1;
@@ -874,8 +896,8 @@
   }
   function pumpkinPlant(b, stage, cond) {
     const runners = vinePlant(b, stage, cond, {
-      pal: [PP.leaf, PP.tip], vine: PP.vine, lens: [0, 0.6, 1.3, 1.6, 1.7], spacing: 0.26, petH: 0.26, leafL: 0.27, leafW: 0.17, lobes: [5, 0.2], cup: 0.4, serr: [14, 0.08],
-      vein: '#9dbb7a', flower: ['#f2a62a', '#e07d17'], flowerSize: 0.045, dieBack: true
+      pal: [PP.leaf, PP.tip], vine: PP.vine, lens: [0, 0.6, 1.3, 1.6, 1.7], spacing: 0.22, petH: 0.28, leafL: 0.36, leafW: 0.17, lobes: [5, 0.2], cup: 0.4, serr: [14, 0.08],
+      vein: '#9dbb7a', flower: ['#f2a62a', '#e07d17'], flowerSize: 0.045, dieBack: true, slot: 'pumpkin', photoScale: 1.4
     });
     if (!runners || stage < 3) return;
     const sc = cond === 'lown' ? 0.85 : 1, rn = runners[0], P = rn.curve.getPoint(0.55), side = flatSide(rn.curve.getTangent(0.55).setY(0).normalize());
@@ -902,7 +924,7 @@
       const start = new V3(D.x * 0.006 * (1 - q), 0.006 + 0.025 * q * (stage / 4), D.z * 0.006 * (1 - q));
       blade(b, start, D, L, W, {
         tilt: head ? 0.75 + 0.4 * q : 0.22 + 0.7 * q, droop: (head ? 0.05 : 0.35 * (1 - q)) + (dry ? 0.4 : 0), cup: 0.22 + 0.3 * q, fold: 0.04,
-        wave: [30, W * 0.09, 4], waveGrow: true, pal: [mixHex(LP.outer, LP.inner, q), mixHex(LP.outerTip, LP.innerTip, q)], segs: 22, age: 1 - q, cond, vein: LP.rib,
+        wave: [30, W * 0.09, 4], waveGrow: true, pal: [mixHex(LP.outer, LP.inner, q), mixHex(LP.outerTip, LP.innerTip, q)], segs: 22, age: 1 - q, cond, vein: LP.rib, slot: 'lettuce', photoScale: 1.3, tint: 0.55,
         width: (t) => Math.pow(Math.sin(Math.PI * (0.1 + 0.82 * Math.pow(t, 0.8))), 0.5)
       });
     }
@@ -911,21 +933,21 @@
   // =====================================================================
   // CABBAGE
   // =====================================================================
-  const CB = { leaf: '#4a7a62', tip: '#77a088', head: '#b4d08a', headTop: '#d2e6ae', wrap: '#94bd78', vein: '#d6e6c8' };
+  const CB = { leaf: '#4a7a62', tip: '#77a088', head: '#7fa458', headTop: '#a3c477', wrap: '#7da562', vein: '#d6e6c8' };
   const CABBAGE_STAGES = [
     { name: 'Seedling', day: 10, height: 0.04 }, { name: 'Young', day: 25, height: 0.12 }, { name: 'Leafy', day: 45, height: 0.22 },
     { name: 'Heading', day: 65, height: 0.28 }, { name: 'Ready', day: 85, height: 0.3 }
   ];
   function cabbageHead(b, ctr, R) {
     const hs = [-1, -0.85, -0.6, -0.25, 0.15, 0.5, 0.78, 0.94, 1];
-    b.as(MAT.WAXY, () => {
+    b.as(MAT.FOLIAGE, () => {
       lathe(b, ctr, Y, hs.map((h) => [h * R * 0.92, R * 0.97 * Math.pow(Math.max(0, 1 - h * h), 0.5)]), 18, (t, i, k) => hex(CB.head).lerp(hex(CB.headTop), t).multiplyScalar(((k + i * 2) % 5 === 0 ? 0.92 : 1) * (0.96 + b.r() * 0.05)));
       // overlapping wrapper leaves, each hugging the head with a pale midrib and veins
       for (let j = 0; j < 9; j++) {
         const az = j * 2.39996 + 0.4, reach = 1.5 + (j % 3) * 0.35, pts = [];
         [0.3, 0.75, 1.15, 1.55, reach].forEach((ph) => pts.push(ctr.clone().add(new V3(Math.cos(az) * Math.sin(ph) * R * 1.03, -Math.cos(ph) * R * 1.0, Math.sin(az) * Math.sin(ph) * R * 1.03))));
-        ribbon(b, Curve(pts), 12, (t) => R * 0.95 * Math.pow(Math.sin(Math.PI * (0.1 + 0.9 * t)), 0.55), new V3(-Math.sin(az), 0, Math.cos(az)), {
-          uv: 'broad', fold: -0.06, cup: -0.12, wave: [12, R * 0.02, 3],
+        ribbon(b, Curve(pts), 12, b.photo ? () => R * 1.15 : (t) => R * 0.95 * Math.pow(Math.sin(Math.PI * (0.1 + 0.9 * t)), 0.55), new V3(-Math.sin(az), 0, Math.cos(az)), {
+          uv: 'broad', slot: b.photo ? 'cabbage' : null, tint: 0.75, fold: -0.06, cup: -0.12, wave: [12, R * 0.02, 3],
           colAt: (t, part, x) => { const c = plain(b, CB.wrap, CB.head, t); return part === 1 ? c.lerp(hex(CB.vein), 0.6) : Math.abs(Math.sin(x * 4 + t * 6)) < 0.15 ? c.lerp(hex(CB.vein), 0.3) : c; }
         });
       }
@@ -941,7 +963,7 @@
         const q = i / n, D = dirOf(az0 + i * 2.39996), L = Lb * (0.85 + 0.3 * r());
         blade(b, new V3(0, hs * (0.3 + 0.7 * q), 0).addScaledVector(D, 0.008), D, L, L * 0.88, {
           tilt: head ? 0.9 : 0.55 - 0.25 * (1 - q) * (stage / 4), droop: (head ? 0.1 : 0.32) + (dry ? 0.4 : 0), cup: 0.26, fold: 0.05, wave: [16, L * 0.025, 3], waveGrow: true,
-          pal: [CB.leaf, CB.tip], segs: 16, age: 1 - q, cond, vein: CB.vein, width: (t) => Math.pow(Math.sin(Math.PI * (0.15 + 0.78 * t)), 0.5)
+          pal: [CB.leaf, CB.tip], segs: 16, age: 1 - q, cond, vein: CB.vein, slot: 'cabbage', photoScale: 1.35, tint: 0.7, width: (t) => Math.pow(Math.sin(Math.PI * (0.15 + 0.78 * t)), 0.5)
         });
       }
     });
@@ -968,7 +990,7 @@
   }
   function potatoPlant(b, stage, cond) {
     const r = b.r, sc = cond === 'lown' ? 0.85 : 1, dry = cond === 'dry', az0 = r() * Math.PI * 2, dead = stage === 4;
-    const pal = dead ? { leaf: '#b0a24a', tip: '#8a7438', stem: '#9a8c4a', stemTip: '#857640', serr: [7, 0.06] } : { leaf: PO.leaf, tip: PO.tip, stem: PO.stem, stemTip: PO.stemTip, serr: [7, 0.06] };
+    const pal = dead ? { leaf: '#b0a24a', tip: '#8a7438', stem: '#9a8c4a', stemTip: '#857640', serr: [7, 0.06], photo: 'potato' } : { leaf: PO.leaf, tip: PO.tip, stem: PO.stem, stemTip: PO.stemTip, serr: [7, 0.06], photo: 'potato' };
     if (stage === 0) {
       tuber(b, new V3(0, -0.07, 0), new V3(1, 0, 0), 0.026, 0.075);
       b.as(MAT.MATTE, () => tube(b, Curve([new V3(0, -0.05, 0), new V3(0.004, 0, 0), new V3(0, 0.05, 0.003)]), 4, 5, () => 0.003, (t) => plain(b, '#c9b48a', PO.stem, t)));
@@ -1001,14 +1023,14 @@
   function single(fn, spots, salt, aoK) {
     return function (o) {
       const stage = o.stage | 0, cond = o.condition || 'healthy', seed = o.seed || 1;
-      const b = new Builder(seed * 7919 + stage * 131 + cond.length + salt, spots, o.lod || 0);
+      const b = new Builder(seed * 7919 + stage * 131 + cond.length + salt, spots, o.lod || 0, o.photo);
       fn(b, stage, cond);
       return finish(b, 1, aoK[stage]);
     };
   }
   function item(fn, salt, round) {
     return function (o) {
-      const b = new Builder((o.seed || 1) * 104729 + salt, null);
+      const b = new Builder((o.seed || 1) * 104729 + salt, null, 0, o.photo);
       fn(b);
       if (o.dirty) dirtify(b, 0, o.amount === undefined ? 0.85 : o.amount);
       const g = finish(b, 1, 0), bb = g.boundingBox;
@@ -1067,12 +1089,15 @@
     o = o || {};
     return MATERIALS.map((d) => {
       const m = new THREE.MeshStandardMaterial({ name: d.name, vertexColors: true, side: THREE.DoubleSide, roughness: Math.min(1, d.roughness * (o.roughness || 1)), metalness: 0, map: o.map || null });
+      if (o.normalMap) { m.normalMap = o.normalMap; m.normalScale = new THREE.Vector2(0.8, 0.8); }
+      if (o.alphaTest) m.alphaTest = o.alphaTest;
       if (o.colorBoost) m.color.setScalar(o.colorBoost);
-      if (o.onBeforeCompile) m.onBeforeCompile = o.onBeforeCompile;
+      const i = MATERIALS.indexOf(d);
+      if (o.onBeforeCompile) { m.onBeforeCompile = (sh) => o.onBeforeCompile(sh, i); m.customProgramCacheKey = () => 'fwcrop' + i + (o.key || ''); }
       if (o.envMapIntensity !== undefined) m.envMapIntensity = o.envMapIntensity;
       return m;
     });
   }
 
-  root.FWCrops = { CROPS, CONDITIONS, MATERIALS, MAT, rng, leafTexture, soilTexture, makeMaterials };
+  root.FWCrops = { CROPS, CONDITIONS, MATERIALS, MAT, rng, leafTexture, soilTexture, makeMaterials, hasPhotoAtlas: !!ATLAS };
 })(typeof window !== 'undefined' ? window : globalThis);

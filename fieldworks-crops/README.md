@@ -20,6 +20,10 @@
 
 Crops: wheat, corn, carrot, tomato, watermelon, pumpkin, lettuce, cabbage, potato.
 
+## Photo mode
+
+Built with `{ photo: true }` (and `cropatlas.js` loaded first), every leaf is a real photo-scanned leaf from `crop_atlas_color.png`: the card's outline comes from the photo's transparency, the crop's colour tints it. The viewer lights the scene from a real sky panorama (projected onto the ground too), uses photo-scanned soil, and adds light shining through leaves. Sources and licences are in `CREDITS.md` (all CC0).
+
 ## Using the models in the game
 
 - Units are metres. A plant's base sits at the origin; roots and tubers go below y = 0.
