@@ -11,7 +11,7 @@ export const WASHER_DEF = {
   levels: [
     { level: 1, beltSpeed: 0.3, slots: 3, motorKw: 2.2, pumpKw: 1.1, waterLpm: 38, inCap: 12, outCap: 24, cost: 0, parts: [] },
     { level: 2, beltSpeed: 0.42, slots: 4, motorKw: 3.0, pumpKw: 1.5, waterLpm: 46, inCap: 18, outCap: 32, cost: 1800, parts: ['Brush set (nylon)', 'Spray nozzles x12'] },
-    { level: 3, beltSpeed: 0.58, slots: 5, motorKw: 4.0, pumpKw: 2.2, waterLpm: 58, inCap: 24, outCap: 40, cost: 4200, parts: ['Gearbox 1:12', 'High-pressure pump', 'Brush set (nylon)'] }
+    { level: 3, beltSpeed: 0.58, slots: 5, motorKw: 5.5, pumpKw: 3.0, waterLpm: 58, inCap: 24, outCap: 40, cost: 4200, parts: ['Gearbox 1:12', 'High-pressure pump', 'Brush set (nylon)'] }
   ],
   washLength: 1.6,          // metres of brush bed an item travels
   waterTankL: 400,
@@ -34,6 +34,8 @@ export class Machine {
     this.condition = 100;
     this.hours = 0;
     this.fault = null;        // { code, text, since }
+    this.powered = true;      // set by the power network each tick
+    this.outLimit = Infinity; // physical room on the output belt
     this.time = 0;
     this.finishedTimes = [];  // timestamps of finished items (throughput)
     this.totalDone = 0;
@@ -48,6 +50,7 @@ export class Machine {
   note(text) { this.log.unshift({ t: this.time, text }); this.log.length = Math.min(this.log.length, 12); }
 
   // ---------- inputs and outputs ----------
+  outCap() { return Math.min(this.level.outCap, this.outLimit); }
   canAccept() { return this.inBuffer.length < this.level.inCap; }
   feed(item) { if (!this.canAccept()) return false; this.inBuffer.push(item); return true; }
   take() { const it = this.outBuffer.shift(); if (it) this.emit({ type: 'taken', item: it }); return it || null; }
@@ -63,15 +66,17 @@ export class Machine {
   // ---------- simulation ----------
   status() {
     if (!this.on) return 'off';
+    if (!this.powered) return 'stopped';
     if (this.fault) return 'stopped';
-    if (this.outBuffer.length >= this.level.outCap) return 'waiting';
+    if (this.outBuffer.length >= this.outCap()) return 'waiting';
     if (!this.slots.length && !this.inBuffer.length) return 'waiting';
     return 'running';
   }
   reason() {
     if (!this.on) return 'Switched off';
+    if (!this.powered) return 'No power - check the generator';
     if (this.fault) return this.fault.text;
-    if (this.outBuffer.length >= this.level.outCap) return 'Output full - collect washed produce';
+    if (this.outBuffer.length >= this.outCap()) return 'Output belt full';
     if (!this.slots.length && !this.inBuffer.length) return 'Waiting for produce';
     return 'Washing';
   }
@@ -95,7 +100,7 @@ export class Machine {
     this.energyKwh += kw * dt / 3600;
     if (running) { this.hours += dt / 3600; this.condition = Math.max(0, this.condition - this.def.wearPerHour * dt / 3600); }
     // faults
-    if (!this.fault && this.on) {
+    if (!this.fault && this.on && this.powered) {
       if (this.water < this.def.waterTankL * 0.05) this.fault = { code: 'water', text: 'Low water - spray pressure lost', since: this.time };
       else if (this.motorC > 92) this.fault = { code: 'heat', text: 'Motor over temperature', since: this.time };
       else if (running && this.condition < 25 && Math.random() < dt * 0.02) this.fault = { code: 'jam', text: 'Brush bed jammed - service needed', since: this.time };
@@ -104,13 +109,13 @@ export class Machine {
     if (this.fault && this.fault.code === 'water' && this.water > this.def.waterTankL * 0.25) this.clearFault();
     if (this.fault && this.fault.code === 'heat' && this.motorC < 70) this.clearFault();
     // processing
-    if (running || (this.on && !this.fault && this.outBuffer.length < L.outCap)) {
+    if (running || (this.on && this.powered && !this.fault && this.outBuffer.length < this.outCap())) {
       const rate = (L.beltSpeed * this.efficiency()) / this.def.washLength;      // fraction of the bed per second
       for (let i = this.slots.length - 1; i >= 0; i--) {
         const s = this.slots[i];
         s.progress += rate * dt;
         if (s.progress >= 1) {
-          if (this.outBuffer.length >= L.outCap) { s.progress = 1; continue; }
+          if (this.outBuffer.length >= this.outCap()) { s.progress = 1; continue; }
           this.slots.splice(i, 1);
           s.item.clean = true;
           this.outBuffer.push(s.item);
@@ -133,6 +138,7 @@ export class Machine {
   powerKw() {
     const st = this.status(), L = this.level;
     if (st === 'off') return 0.02;
+    if (!this.powered) return 0;
     if (st === 'stopped') return 0.12;
     if (st === 'waiting') return 0.25 + L.pumpKw * 0.1;
     return (L.motorKw * (0.55 + 0.45 * Math.min(1, this.slots.length / L.slots)) + L.pumpKw) / this.efficiency();
@@ -160,10 +166,10 @@ export class Machine {
       },
       resources: {
         input: this.def.input, output: this.def.output, inCount: this.inBuffer.length, inCap: L.inCap,
-        processing: this.slots.length, outCount: this.outBuffer.length, outCap: L.outCap,
+        processing: this.slots.length, outCount: this.outBuffer.length, outCap: this.outCap(),
         water: this.water, waterCap: this.def.waterTankL,
         missing: this.inBuffer.length || this.slots.length ? [] : [this.def.input],
-        limits: [this.outBuffer.length >= L.outCap ? 'Output full' : null, this.water < this.def.waterTankL * 0.2 ? 'Water low' : null].filter(Boolean)
+        limits: [this.outBuffer.length >= this.outCap() ? 'Output belt full' : null, this.water < this.def.waterTankL * 0.2 ? 'Water low' : null].filter(Boolean)
       },
       upgrades: {
         level: L.level, maxLevel: this.def.levels.length, next: next ? {
@@ -176,9 +182,60 @@ export class Machine {
         remainingS: current ? (1 - current.progress) / Math.max(1e-6, rate) : 0,
         fault: this.fault ? this.fault.text : null,
         maintenance: this.condition < 40 ? 'Service now' : this.condition < 70 ? 'Service soon' : 'OK', repairCost: this.repairCost(),
-        connections: { infeed: true, outfeed: true, water: this.water > 0, power: true },
+        connections: { infeed: true, outfeed: true, water: this.water > 0, power: this.powered },
         log: this.log.slice(0, 6)
       }
     };
   }
 }
+
+// ---------------------------------------------------------------------------
+// Shared helpers for every machine's inspection panel and controls.
+export const money = (n) => '$' + Math.round(n).toLocaleString();
+export function standardAct(sim, id, wallet, name) {
+  if (id === 'power') { sim.setOn(!sim.on); return { msg: `${name} ${sim.on ? 'started' : 'stopped'}` }; }
+  if (id === 'service') {
+    const c = sim.repairCost();
+    if (!c) return { msg: `${name} is already in perfect condition` };
+    if (c > wallet) return { msg: `A service costs ${money(c)}` };
+    sim.repair(); return { cost: c, msg: `${name} serviced for ${money(c)}` };
+  }
+  if (id === 'upgrade') {
+    const n = sim.nextLevel();
+    if (!n) return { msg: `${name} is fully upgraded` };
+    if (n.cost > wallet) return { msg: `The upgrade needs ${money(n.cost)}` };
+    sim.upgrade(); return { cost: n.cost, msg: `${name} upgraded to level ${n.level}` };
+  }
+  return null;
+}
+export function standardActions(sim) {
+  const n = sim.nextLevel();
+  return [
+    { id: 'power', label: sim.on ? 'Stop' : 'Start' },
+    { id: 'service', label: `Service ${money(sim.repairCost())}` },
+    { id: 'upgrade', label: n ? `Upgrade ${money(n.cost)}` : 'Fully upgraded', disabled: !n }
+  ];
+}
+export const condColor = (c) => (c < 40 ? 'var(--bad)' : c < 70 ? 'var(--warn)' : 'var(--ok)');
+
+Machine.prototype.panel = function () {
+  const s = this.stats(), id = s.identity, p = s.performance, r = s.resources, u = s.upgrades, o = s.operation;
+  const f1 = (n) => n.toFixed(1);
+  return {
+    key: 'washer', title: `${id.model} ${id.name}`, sub: `${id.brand} · ${id.category}`, status: id.status, reason: id.reason,
+    tabs: {
+      overview: [['Type', id.type], ['Model', id.model], ['Status', id.reason], ['Throughput', f1(p.throughputPerMin) + ' items/min'], ['Power', p.powerKw.toFixed(2) + ' kW'], ['Condition', Math.round(p.condition) + '%'], ['Level', `${u.level} of ${u.maxLevel}`], ['Washed in total', p.totalDone]],
+      performance: [['Throughput', f1(p.throughputPerMin) + ' /min'], ['Maximum', Math.round(p.maxPerMin) + ' /min'], ['Belt speed', p.beltSpeed.toFixed(2) + ' m/s'], ['Processing slots', p.slots], ['Power draw', p.powerKw.toFixed(2) + ' kW'], ['Rated power', f1(p.ratedKw) + ' kW'], ['Water use', p.waterLpm + ' L/min'], ['Spray pressure', f1(p.sprayBar) + ' bar'], ['Efficiency', Math.round(p.efficiency * 100) + '%'], ['Motor temperature', f1(p.motorC) + ' °C'], ['Running hours', p.hours.toFixed(3) + ' h'], ['Energy used', p.energyKwh.toFixed(3) + ' kWh'], ['Water used', Math.round(p.waterUsedL) + ' L']],
+      resources: [['Input', r.input], ['Input queue', `${r.inCount} / ${r.inCap}`], ['Being washed', r.processing], ['Output', r.output], ['Output belt', `${r.outCount} / ${r.outCap}`], ['Water tank', `${Math.round(r.water)} / ${r.waterCap} L`], ['Missing', r.missing.length ? r.missing.join(', ') : 'Nothing'], ['Limits', r.limits.length ? r.limits.join(', ') : 'None']],
+      upgrades: { rows: u.next ? [['Current level', `${u.level} of ${u.maxLevel}`], ['Next level', u.next.level], ['Cost', money(u.next.cost)], ['Parts', u.next.parts.join(', ')]] : [['Current level', `${u.level} of ${u.maxLevel}`], ['Next level', 'Fully upgraded']], gains: u.next ? u.next.gains : [] },
+      operation: { rows: [['Current task', o.task], ['Progress', Math.round(o.progress * 100) + '%'], ['Time left', o.remainingS ? f1(o.remainingS) + ' s' : '–'], ['Fault', o.fault || 'None'], ['Maintenance', o.maintenance], ['Service cost', money(o.repairCost)], ['Infeed', 'Connected'], ['Outfeed', 'Connected'], ['Water supply', o.connections.water ? 'OK' : 'Empty'], ['Power', o.connections.power ? 'GX-12 generator' : 'No supply']], log: o.log }
+    },
+    strip: [
+      { k: 'Throughput', v: f1(p.throughputPerMin) + ' /min' }, { k: 'Power', v: f1(p.powerKw) + ' kW' }, { k: 'Spray', v: f1(p.sprayBar) + ' bar' },
+      { k: 'Motor', v: Math.round(p.motorC) + ' °C' }, { k: 'Water', v: Math.round(r.water) + ' L', f: r.water / r.waterCap, c: 'var(--water)' },
+      { k: 'Condition', v: Math.round(p.condition) + '%', f: p.condition / 100, c: condColor(p.condition) }, { k: 'Output belt', v: `${r.outCount} / ${r.outCap}`, f: r.outCount / Math.max(1, r.outCap) }
+    ],
+    actions: standardActions(this)
+  };
+};
+Machine.prototype.act = function (id, wallet) { return standardAct(this, id, wallet, 'Washer'); };
