@@ -7,7 +7,7 @@ It's written for **three.js r147** with ES module imports (`three/examples/jsm/.
 ## What it adds
 
 - **HDR post-processing chain:** scene → ambient occlusion (SAO, half resolution) → bloom → final pass (exposure, ACES filmic tone mapping, colour grading, vignette, sRGB) → anti-aliasing (SMAA or FXAA).
-- **Bloom only on real light sources:** bloom starts above brightness 1.0, so only emissive parts glow. Make a part glow by giving it `emissive` colour with `emissiveIntensity` between 2 and 4. Ordinary bright surfaces like white walls and sky don't bloom.
+- **Bloom only on real light sources:** bloom starts above brightness 1.4, so only emissive parts glow (sunlit metal highlights stay below it). Make a part glow by giving it `emissive` colour with `emissiveIntensity` between 2 and 4. Ordinary bright surfaces like white walls and sky don't bloom.
 - **Reflections:** an image-based environment map at an adjustable strength (default 0.2), so metal, glass and wet surfaces reflect.
 - **Shadow quality:** off, low, medium, high, ultra (1024–4096, PCF or soft PCF) applied to the sun.
 - **Colour grading looks for areas:** `farm`, `workshop`, `factory`, `greenhouse`, `power`, `dusk`, `neutral`, blended smoothly when the player moves between areas.

@@ -145,7 +145,7 @@ export function createGraphics(opts) {
   const renderPass = new RenderPass(scene, camera);
   const sao = new SAOPass(scene, camera, false, true, new THREE.Vector2(256, 256));
   Object.assign(sao.params, { output: 0, saoBias: 0.5, saoIntensity: 0.012, saoScale: 4, saoKernelRadius: 22, saoMinResolution: 0, saoBlur: true, saoBlurRadius: 6, saoBlurStdDev: 3, saoBlurDepthCutoff: 0.01 });
-  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.55, 0.42, 1.0);
+  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.55, 0.42, 1.4);
   const final = new ShaderPass(FinalShader);
   const smaa = new SMAAPass(256, 256);
   const fxaa = new ShaderPass(FXAAShader);
