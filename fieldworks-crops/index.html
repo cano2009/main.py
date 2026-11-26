@@ -1,0 +1,631 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fieldworks Crops</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: a model viewer. Crop picker, name and figures, the 3D viewport, then controls for the current view. Single dark look, like a barn at dusk. */
+:root {
+  --bg: #15120d;
+  --panel: #1f1a13;
+  --panel-on: #2c2416;
+  --line: #3a3124;
+  --fg: #efe6d2;
+  --muted: #a89a80;
+  --accent: #e0b552;
+  --accent-ink: #1b150b;
+  --font-display: 'Bricolage Grotesque', 'Arial Narrow', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.5; }
+.wrap {
+  max-width: 980px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 18px 32px;
+  display: grid; gap: 16px;
+}
+.crops { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; }
+.crop { font: 600 13.5px var(--font-body); color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 10px; padding: 8px 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 7px; min-width: 0; }
+.crop .dot { width: 10px; height: 10px; border-radius: 50%; flex: none; }
+.crop[aria-pressed="true"] { color: var(--fg); border-color: var(--accent); background: var(--panel-on); }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px 16px; }
+.eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+h1 { margin: 2px 0 0; font-family: var(--font-display); font-weight: 800; font-size: clamp(28px, 7vw, 44px); line-height: 1; letter-spacing: -0.02em; text-wrap: balance; }
+.stats { font-family: var(--font-mono); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; display: flex; flex-wrap: wrap; gap: 4px 14px; }
+.stats b { color: var(--fg); font-weight: 500; }
+
+.viewport { position: relative; width: 100%; aspect-ratio: 4 / 3.4; max-height: 64vh; min-height: 320px; border-radius: 14px; overflow: hidden; background: #6f8aa0; border: 1px solid var(--line); }
+.viewport canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.hint { position: absolute; left: 12px; bottom: 10px; font-family: var(--font-mono); font-size: 11px; color: #f5efe0; background: rgba(21,18,13,0.55); padding: 4px 8px; border-radius: 6px; pointer-events: none; }
+.view-toggle { position: absolute; right: 8px; top: 8px; display: flex; flex-wrap: wrap; justify-content: flex-end; background: rgba(21,18,13,0.72); border-radius: 999px; padding: 3px; gap: 2px; max-width: calc(100% - 16px); }
+.view-toggle button { font: 500 12px var(--font-body); color: var(--fg); background: transparent; border: 0; border-radius: 999px; padding: 6px 11px; cursor: pointer; }
+.view-toggle button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+.pull { position: absolute; left: 8px; top: 52px; font: 600 12px var(--font-body); color: var(--accent-ink); background: var(--accent); border: 0; border-radius: 999px; padding: 7px 13px; cursor: pointer; }
+.tag { position: absolute; bottom: 44px; transform: translateX(-50%); font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #f5efe0; background: rgba(21,18,13,0.65); padding: 4px 9px; border-radius: 6px; pointer-events: none; }
+
+.stage-track { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 6px; }
+.stage { text-align: left; background: var(--panel); color: var(--fg); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px 10px; cursor: pointer; display: grid; gap: 2px; min-width: 0; }
+.stage .n { font-family: var(--font-mono); font-size: 11px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.stage .nm { font-weight: 600; font-size: 13px; line-height: 1.2; overflow-wrap: anywhere; }
+.stage[aria-pressed="true"] { border-color: var(--accent); background: var(--panel-on); }
+.stage[aria-pressed="true"] .n { color: var(--accent); }
+.controls { display: grid; gap: 12px; }
+.row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.label { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-right: 4px; }
+.chip { font: 500 13px var(--font-body); color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 7px 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+.chip .dot { width: 9px; height: 9px; border-radius: 50%; }
+.chip[aria-pressed="true"] { border-color: var(--fg); background: var(--panel-on); }
+.spacer { flex: 1; }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.note { color: var(--muted); font-size: 14px; max-width: 65ch; margin: 0; }
+@media (max-width: 520px) {
+  .stage { padding: 8px 6px; }
+  .stage .nm { font-size: 11.5px; }
+  .crop { font-size: 12.5px; gap: 6px; }
+  .view-toggle button { padding: 6px 9px; }
+}
+</style>
+
+<div class="wrap">
+  <div class="crops" id="crops" role="group" aria-label="Crop"></div>
+
+  <header>
+    <div>
+      <div class="eyebrow" id="eyebrow">Fieldworks · crop models</div>
+      <h1 id="title">Winter wheat</h1>
+    </div>
+    <div class="stats" id="stats" aria-live="polite"></div>
+  </header>
+
+  <div class="viewport" id="viewport">
+    <div class="view-toggle" role="group" aria-label="View">
+      <button type="button" id="view-plant" aria-pressed="true">Plant</button>
+      <button type="button" id="view-field" aria-pressed="false">Field</button>
+      <button type="button" id="view-produce" aria-pressed="false">Produce</button>
+      <button type="button" id="view-washer" aria-pressed="false">Washer</button>
+    </div>
+    <button type="button" class="pull" id="pull" hidden>Pull up</button>
+    <span class="tag" id="tag-dirty" style="left:30%" hidden>Dirty</span>
+    <span class="tag" id="tag-clean" style="left:70%" hidden>Washed</span>
+    <div class="hint">Drag to turn · pinch to zoom</div>
+  </div>
+
+  <div class="controls" id="grow-controls">
+    <div class="stage-track" id="stages" role="group" aria-label="Growth stage"></div>
+    <div class="row" role="group" aria-label="Condition">
+      <span class="label">Condition</span>
+      <span id="conds" class="row"></span>
+      <span class="spacer"></span>
+      <button type="button" class="chip" id="wind" aria-pressed="true">Wind on</button>
+    </div>
+  </div>
+
+  <div class="controls" id="washer-controls" hidden>
+    <div class="row" role="group" aria-label="Belt speed">
+      <span class="label">Belt</span>
+      <button type="button" class="chip" id="speed-slow" aria-pressed="false">Slow</button>
+      <button type="button" class="chip" id="speed-normal" aria-pressed="true">Normal</button>
+      <button type="button" class="chip" id="speed-fast" aria-pressed="false">Fast</button>
+      <span class="spacer"></span>
+      <button type="button" class="chip" id="run" aria-pressed="true">Running</button>
+    </div>
+  </div>
+
+  <p class="note" id="note"></p>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/controls/OrbitControls.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.147.0/examples/js/environments/RoomEnvironment.js"></script>
+<script src="crops.js"></script>
+<script src="station.js"></script>
+<script>
+(function () {
+  'use strict';
+  const F = window.FWCrops, CROPS = F.CROPS, ST = window.FWStation;
+  const COND_COLORS = { healthy: '#7dbd45', dry: '#b39a5c', lown: '#c9d273' };
+  const SPEEDS = { slow: 0.25, normal: 0.4, fast: 0.6 };
+  const hot = window.claude && window.claude.hot;
+  const saved = (hot && hot.data) || {};
+  const state = {
+    crop: CROPS[saved.crop] ? saved.crop : 'wheat',
+    stage: saved.stage ?? 4, cond: saved.cond ?? 'healthy', view: saved.view ?? 'plant', wind: saved.wind ?? true,
+    speed: saved.speed ?? 'normal', running: true, pulled: false
+  };
+  if (hot && hot.snapshot) hot.snapshot(() => ({ ...state }));
+  const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (reduceMotion && saved.wind === undefined) state.wind = false;
+  const crop = () => CROPS[state.crop];
+  const $ = (id) => document.getElementById(id);
+
+  // ---------- renderer and scene ----------
+  const host = $('viewport');
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.outputEncoding = THREE.sRGBEncoding;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.05;
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  host.prepend(renderer.domElement);
+
+  const scene = new THREE.Scene();
+  const sky = document.createElement('canvas'); sky.width = 2; sky.height = 256;
+  const sg = sky.getContext('2d'), grad = sg.createLinearGradient(0, 0, 0, 256);
+  grad.addColorStop(0, '#5f86ad'); grad.addColorStop(0.55, '#a9bfcc'); grad.addColorStop(0.8, '#e6d2a8'); grad.addColorStop(1, '#e9d6ac');
+  sg.fillStyle = grad; sg.fillRect(0, 0, 2, 256);
+  const skyTex = new THREE.CanvasTexture(sky); skyTex.encoding = THREE.sRGBEncoding;
+  scene.background = skyTex;
+  scene.fog = new THREE.Fog(new THREE.Color('#cdbf98'), 14, 60);
+
+  const camera = new THREE.PerspectiveCamera(38, 1, 0.01, 180);
+  const controls = new THREE.OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true; controls.enablePan = false;
+  controls.maxPolarAngle = Math.PI * 0.49;
+
+  scene.add(new THREE.HemisphereLight(new THREE.Color('#cfe0f0'), new THREE.Color('#5a4630'), 0.75));
+  const sun = new THREE.DirectionalLight(new THREE.Color('#fff1d6'), 2.4);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048);
+  sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.015;
+  scene.add(sun); scene.add(sun.target);
+  let envTex = null;
+  function environment() {
+    if (!envTex && THREE.RoomEnvironment) {
+      const pm = new THREE.PMREMGenerator(renderer);
+      envTex = pm.fromScene(new THREE.RoomEnvironment(), 0.04).texture;
+      pm.dispose();
+    }
+    return envTex;
+  }
+
+  // ---------- materials ----------
+  const LT = F.leafTexture();
+  const leafTex = new THREE.DataTexture(LT.data, LT.width, LT.height);
+  leafTex.generateMipmaps = true; leafTex.minFilter = THREE.LinearMipmapLinearFilter; leafTex.magFilter = THREE.LinearFilter; leafTex.needsUpdate = true;
+  const uTime = { value: 0 }, uWind = { value: 1 }, uH = { value: 0.9 }, uStiff = { value: 1 };
+  function cropMaterial(rough, wind) {
+    const m = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: rough, metalness: 0, map: leafTex });
+    m.color.setScalar(LT.colorBoost);
+    if (wind) m.onBeforeCompile = (sh) => {
+      Object.assign(sh.uniforms, { uTime, uWind, uH, uStiff });
+      sh.vertexShader = 'uniform float uTime; uniform float uWind; uniform float uH; uniform float uStiff;\n' + sh.vertexShader.replace('#include <begin_vertex>', `
+        #include <begin_vertex>
+        float hgt = max(transformed.y, 0.0) / uH;
+        vec3 wp = (modelMatrix * vec4(0.0, 0.0, 0.0, 1.0)).xyz;
+        #ifdef USE_INSTANCING
+          wp += vec3(instanceMatrix[3][0], 0.0, instanceMatrix[3][2]);
+        #endif
+        float ph = wp.x * 1.7 + wp.z * 1.1;
+        float gust = 0.6 + 0.4 * sin(uTime * 0.35 + wp.x * 0.25);
+        float sway = (sin(uTime * 1.9 + ph) * 0.55 + sin(uTime * 3.3 + ph * 2.1) * 0.2) * uWind * gust * uStiff * uH * 0.3;
+        transformed.x += sway * hgt * hgt;
+        transformed.z += sway * hgt * hgt * 0.38;`);
+    };
+    return m;
+  }
+  const plantMat = cropMaterial(0.82, true);
+  const dirtyMat = cropMaterial(0.92, false);
+  const cleanMat = cropMaterial(0.5, false);
+  dirtyMat.envMapIntensity = 0.45; cleanMat.envMapIntensity = 0.6;
+  const soilMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96 });
+  const clodMat = new THREE.MeshStandardMaterial({ roughness: 0.95 });
+  const grassMat = new THREE.MeshStandardMaterial({ color: new THREE.Color('#6f7f3e').convertSRGBToLinear(), roughness: 1 });
+  const woodMat = new THREE.MeshStandardMaterial({ color: new THREE.Color('#9a7550').convertSRGBToLinear(), roughness: 0.8 });
+
+  function soil(size, seg, row, cond) {
+    const g = new THREE.PlaneGeometry(size, size, seg, seg);
+    g.rotateX(-Math.PI / 2);
+    const pos = g.attributes.position, cols = [], r = F.rng(11);
+    const low = new THREE.Color(cond === 'dry' ? '#8a6a46' : '#4b3424').convertSRGBToLinear();
+    const top = new THREE.Color(cond === 'dry' ? '#a7865c' : '#6b4d33').convertSRGBToLinear();
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), z = pos.getZ(i), ridge = Math.cos((x / row) * Math.PI * 2);
+      const edge = Math.max(0, Math.max(Math.abs(x), Math.abs(z)) - size / 2 + 0.15) / 0.15;
+      pos.setY(i, ridge * 0.022 * (1 - edge) + (r() - 0.5) * 0.008 - edge * 0.03);
+      const c = low.clone().lerp(top, 0.5 + ridge * 0.4).multiplyScalar(0.88 + r() * 0.24);
+      cols.push(c.r, c.g, c.b);
+    }
+    g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+    g.computeVertexNormals();
+    const m = new THREE.Mesh(g, soilMat); m.receiveShadow = true;
+    return m;
+  }
+  function clods(size, n, cond) {
+    const im = new THREE.InstancedMesh(new THREE.IcosahedronGeometry(1, 0), clodMat, n), r = F.rng(23), tmp = new THREE.Object3D(), c = new THREE.Color();
+    for (let i = 0; i < n; i++) {
+      const s = 0.004 + r() * 0.01;
+      tmp.position.set((r() - 0.5) * size * 0.9, 0.01, (r() - 0.5) * size * 0.9);
+      tmp.rotation.set(r() * 3, r() * 3, r() * 3); tmp.scale.set(s, s * 0.7, s); tmp.updateMatrix();
+      im.setMatrixAt(i, tmp.matrix);
+      c.set(r() < 0.2 ? '#8b8378' : cond === 'dry' ? '#9c7b54' : '#5a4029').convertSRGBToLinear().multiplyScalar(0.8 + r() * 0.4);
+      im.setColorAt(i, c);
+    }
+    im.castShadow = true; im.receiveShadow = true;
+    return im;
+  }
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(90, 48).rotateX(-Math.PI / 2), grassMat);
+  ground.position.y = -0.035; ground.receiveShadow = true; scene.add(ground);
+
+  // ---------- geometry caches ----------
+  const cache = new Map();
+  function plantGeo(stage, cond, seed, stems) {
+    const k = ['p', state.crop, stage, cond, seed, stems || 0].join('|');
+    if (!cache.has(k)) cache.set(k, crop().clump({ stage, condition: cond, seed, stems }));
+    return cache.get(k);
+  }
+  function itemGeo(key, seed, dirty) {
+    const k = ['i', key, seed, dirty].join('|');
+    if (!cache.has(k)) {
+      const g = CROPS[key].produce({ seed, dirty });
+      const bb = g.boundingBox, cx = (bb.min.x + bb.max.x) / 2, cz = (bb.min.z + bb.max.z) / 2, h = bb.max.y - bb.min.y;
+      g.translate(-cx, -bb.min.y - h / 2, -cz);
+      g.userData.half = h / 2;
+      cache.set(k, g);
+    }
+    return cache.get(k);
+  }
+  function itemMesh(key, seed) {
+    const outer = new THREE.Group(), roll = new THREE.Group();
+    const gd = itemGeo(key, seed, true), gc = itemGeo(key, seed, false);
+    const md = new THREE.Mesh(gd, dirtyMat), mc = new THREE.Mesh(gc, cleanMat);
+    md.castShadow = mc.castShadow = true; md.receiveShadow = mc.receiveShadow = true;
+    roll.position.y = gd.userData.half; roll.add(md, mc); outer.add(roll);
+    return { outer, roll, md, mc, half: gd.userData.half, len: gd.userData.length, round: gd.userData.round };
+  }
+
+  // ---------- views ----------
+  let group = null, plantMesh = null, produce = null;
+  function setShadow(half, height, cx) {
+    sun.position.set((cx || 0) + half * 0.6 + 2, Math.max(5, height * 3), half * 0.45 + 1.5);
+    sun.target.position.set(cx || 0, 0, 0);
+    const c = sun.shadow.camera;
+    c.left = c.bottom = -half; c.right = c.top = half; c.far = 40;
+    c.updateProjectionMatrix();
+  }
+  function clearGroup() {
+    if (group) {
+      scene.remove(group);
+      group.traverse((o) => { if (o.isMesh && (o.material === soilMat || o.material === woodMat)) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); });
+    }
+    group = new THREE.Group(); scene.add(group); plantMesh = null; produce = null;
+  }
+
+  function buildPlant() {
+    const C = crop(), st = C.STAGES[state.stage], f = C.field, spread = C.spread || 0;
+    const size = Math.max(state.crop === 'corn' ? 3.2 : 2.4, spread + 0.8);
+    group.add(soil(size, 110, Math.max(0.2, f.row * 0.5), state.cond));
+    group.add(clods(size, 90, state.cond));
+    const g = plantGeo(state.stage, state.cond, 3);
+    plantMesh = new THREE.Mesh(g, plantMat); plantMesh.castShadow = true; plantMesh.receiveShadow = true;
+    if (g.userData.face) plantMesh.rotation.y = g.userData.face - (Math.PI / 4 - 0.6);
+    plantMesh.userData.liftTo = 0;
+    group.add(plantMesh);
+    setShadow(Math.max(0.8, st.height * 0.8, spread * 0.6), st.height);
+    const per = Math.round(g.userData.triangles / g.userData.stems);
+    const s = [`<span><b>${st.name}</b> · day ${st.day}</span>`, `<span>${Math.round(st.height * 100)} cm tall</span>`];
+    if (spread) s.push(`<span>${spread} m wide</span>`);
+    if (C.rootDepth) s.push(`<span>${state.crop === 'potato' ? 'tubers' : 'root'} ${Math.round(C.rootDepth[state.stage] * 100)} cm down</span>`);
+    if (g.userData.stems > 1) s.push(`<span>${g.userData.stems} stems</span>`);
+    s.push(`<span><b>${per.toLocaleString()}</b> triangles per ${C.unit}</span>`);
+    return s;
+  }
+
+  function buildField() {
+    const C = crop(), st = C.STAGES[state.stage], f = C.field, size = f.size;
+    group.add(soil(size, Math.round(size * 34), f.row, state.cond));
+    const stems = f.stems ? f.stems(state.stage) : undefined;
+    const variants = [11, 12, 13].map((s) => plantGeo(state.stage, state.cond, s, stems));
+    const r = F.rng(99), spots = [];
+    for (let x = -size / 2 + Math.max(0.2, f.row / 2); x <= size / 2 - 0.15 + 1e-6; x += f.row)
+      for (let z = -size / 2 + f.step; z <= size / 2 - f.step / 2; z += f.step) spots.push([x + (r() - 0.5) * 0.03, z + (r() - 0.5) * f.step * 0.35]);
+    const buckets = [[], [], []];
+    spots.forEach((p) => buckets[Math.floor(r() * 3)].push(p));
+    const tmp = new THREE.Object3D();
+    buckets.forEach((list, i) => {
+      if (!list.length) return;
+      const im = new THREE.InstancedMesh(variants[i], plantMat, list.length);
+      list.forEach((p, j) => {
+        tmp.position.set(p[0], 0.02, p[1]); tmp.rotation.set(0, r() * Math.PI * 2, 0);
+        const s = 0.9 + r() * 0.2; tmp.scale.set(s, s * (0.94 + r() * 0.12), s); tmp.updateMatrix();
+        im.setMatrixAt(j, tmp.matrix);
+      });
+      im.castShadow = true; im.receiveShadow = true;
+      group.add(im);
+    });
+    setShadow(size / 2 + 0.6, st.height);
+    const per = Math.round(variants.reduce((a, g) => a + g.userData.triangles / g.userData.stems, 0) / 3);
+    return [`<span><b>${st.name}</b> · day ${st.day}</span>`, `<span>${spots.length.toLocaleString()} ${state.crop === 'wheat' ? 'clumps' : 'plants'}</span>`,
+      `<span>rows ${Math.round(f.row * 100)} cm apart</span>`, `<span><b>${per.toLocaleString()}</b> triangles per ${C.unit}</span>`];
+  }
+
+  function buildProduce() {
+    const C = crop(), a = itemMesh(state.crop, 1), b = itemMesh(state.crop, 1);
+    a.md.visible = true; a.mc.visible = false; b.md.visible = false; b.mc.visible = true;
+    const s = Math.max(a.len, a.half * 2), gap = Math.max(0.09, s * 0.7);
+    a.outer.position.set(-gap, 0.02, 0); b.outer.position.set(gap, 0.02, 0);
+    const board = new THREE.Mesh(new THREE.BoxGeometry(gap * 4 + 0.1, 0.02, Math.max(0.3, s * 1.6)), woodMat);
+    board.position.y = 0.01; board.receiveShadow = true; board.castShadow = true;
+    group.add(board, a.outer, b.outer);
+    produce = { a, b };
+    setShadow(Math.max(0.5, gap * 3), 1);
+    const gd = itemGeo(state.crop, 1, false), gdirt = itemGeo(state.crop, 1, true);
+    return [`<span><b>${C.item}</b></span>`, `<span>${Math.round(s * 100)} cm</span>`,
+      `<span><b>${gd.userData.triangles.toLocaleString()}</b> triangles washed, ${gdirt.userData.triangles.toLocaleString()} with soil</span>`];
+  }
+
+  // ---------- washing station ----------
+  const WS = { built: null, floor: null, items: [], resting: [], spawnT: 0, count: 0, particles: null, pdata: null, itemsGroup: new THREE.Group() };
+  scene.add(WS.itemsGroup);
+  function beltTexture() {
+    const c = document.createElement('canvas'); c.width = 64; c.height = 64;
+    const x = c.getContext('2d');
+    x.fillStyle = '#2a2b2d'; x.fillRect(0, 0, 64, 64);
+    x.fillStyle = '#3b3d40'; x.fillRect(0, 0, 10, 64);
+    x.fillStyle = '#202123'; x.fillRect(10, 0, 3, 64);
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t;
+  }
+  function labelTexture() {
+    const c = document.createElement('canvas'); c.width = 512; c.height = 100;
+    const x = c.getContext('2d');
+    x.fillStyle = '#1f2a36'; x.fillRect(0, 0, 512, 100);
+    x.strokeStyle = '#e8b22a'; x.lineWidth = 6; x.strokeRect(4, 4, 504, 92);
+    x.fillStyle = '#efe6d2'; x.font = '700 40px Arial, sans-serif'; x.textBaseline = 'middle';
+    x.fillText('FIELDWORKS  WASHER', 26, 44);
+    x.fillStyle = '#e8b22a'; x.font = '500 22px monospace'; x.fillText('WS-200   BRUSH + SPRAY', 28, 80);
+    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t;
+  }
+  function concrete() {
+    const g = new THREE.PlaneGeometry(9.2, 4.4, 92, 44); g.rotateX(-Math.PI / 2);
+    const pos = g.attributes.position, cols = [], r = F.rng(5), base = new THREE.Color('#8f8c86').convertSRGBToLinear(), yel = new THREE.Color('#e0aa2a').convertSRGBToLinear();
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), z = pos.getZ(i);
+      let c = base.clone().multiplyScalar(0.9 + r() * 0.14);
+      if (Math.abs(((x + 4.6) % 1.5) - 0.75) > 0.72 || Math.abs(((z + 2.2) % 1.5) - 0.75) > 0.72) c.multiplyScalar(0.8);
+      if (Math.abs(Math.abs(z) - 1.25) < 0.05) c = yel.clone();
+      cols.push(c.r, c.g, c.b);
+    }
+    g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+    const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92 }));
+    m.position.set(0.15, 0.002, 0); m.receiveShadow = true;
+    return m;
+  }
+  function ensureStation() {
+    if (WS.built) return;
+    WS.built = ST.build({ beltTexture: beltTexture(), labelTexture: labelTexture() });
+    WS.floor = concrete();
+    WS.built.group.add(WS.floor);
+    const lamp = new THREE.PointLight(new THREE.Color('#e6f4ff'), 0.9, 2.8); lamp.position.set(0, 1.35, 0.1);
+    WS.built.group.add(lamp);
+    const N = 520, pos = new Float32Array(N * 3), vel = new Float32Array(N * 3), r = F.rng(77), nz = WS.built.nozzles;
+    for (let i = 0; i < N; i++) {
+      const n = nz[i % nz.length];
+      vel[i * 3] = (r() - 0.5) * 0.5; vel[i * 3 + 1] = -1.6 - r() * 0.6; vel[i * 3 + 2] = (r() - 0.5) * 0.5;
+      const t = r() * 0.35;
+      pos[i * 3] = n.x + vel[i * 3] * t; pos[i * 3 + 1] = n.y + vel[i * 3 + 1] * t; pos[i * 3 + 2] = n.z + vel[i * 3 + 2] * t;
+    }
+    const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    WS.particles = new THREE.Points(pg, new THREE.PointsMaterial({ color: new THREE.Color('#d8f1ff'), size: 0.014, transparent: true, opacity: 0.75, depthWrite: false }));
+    WS.pdata = { pos, vel };
+    WS.built.group.add(WS.particles);
+    scene.add(WS.built.group);
+  }
+  function resetWasher() {
+    WS.items.concat(WS.resting).forEach((it) => WS.itemsGroup.remove(it.outer));
+    WS.items = []; WS.resting = []; WS.spawnT = 0; WS.count = 0;
+  }
+  function washerStats() {
+    const C = crop();
+    $('stats').innerHTML = `<span><b>${C.item}</b></span><span><b>${WS.count}</b> washed</span><span>belt ${SPEEDS[state.speed]} m/s</span>`;
+  }
+  function buildWasher() {
+    ensureStation();
+    setShadow(4.6, 2.2, 0.2);
+    return null;
+  }
+  function spawnItem() {
+    const it = itemMesh(state.crop, 1 + Math.floor(Math.random() * 3));
+    it.x = WS.built.path.x0; it.state = 'belt'; it.clean = false; it.md.visible = true; it.mc.visible = false;
+    it.outer.position.set(it.x, WS.built.path.y, (Math.random() - 0.5) * 0.12);
+    it.outer.rotation.y = it.round ? Math.random() * 6.28 : (Math.random() - 0.5) * 0.35;
+    it.outer.scale.setScalar(0.3);
+    WS.itemsGroup.add(it.outer);
+    WS.items.push(it);
+  }
+  function updateWasher(dt) {
+    const P = WS.built.path, v = SPEEDS[state.speed], run = state.running, M = WS.built.materials;
+    M.green.emissiveIntensity = run ? 1.6 : 0.1;
+    M.amber.emissive.set(run ? 0x000000 : 0xb07a10);
+    if (!run) return;
+    WS.built.belts.forEach((b) => { if (b.material.map) b.material.map.offset.x -= (v * dt) / 0.12; });
+    WS.built.brushes.forEach((br) => { br.rotation.z -= (v * dt) / 0.048 * 1.6; });
+    const sample = itemGeo(state.crop, 1, true), len = sample.userData.length || 0.1;
+    WS.spawnT -= dt;
+    if (WS.spawnT <= 0) { spawnItem(); WS.spawnT = Math.max(0.9, (len + 0.35) / v); }
+    const C = WS.built.crate;
+    for (let i = WS.items.length - 1; i >= 0; i--) {
+      const it = WS.items[i];
+      if (it.state === 'belt') {
+        it.x += v * dt;
+        it.outer.position.x = it.x;
+        const sc = Math.min(1, 0.3 + (it.x - P.x0) * 5); it.outer.scale.setScalar(sc);
+        if (it.x > P.wash0 && it.x < P.wash1) {
+          it.roll.position.y = it.half + 0.004 + 0.006 * Math.abs(Math.sin(it.x * 34));
+          if (it.round) it.roll.rotation.z -= (v * dt) / Math.max(0.02, it.half);
+          else it.roll.rotation.z = Math.sin(it.x * 30) * 0.035;
+        } else { it.roll.position.y = it.half; if (!it.round) it.roll.rotation.z *= 0.9; }
+        if (!it.clean && it.x > 0.02) { it.md.visible = false; it.mc.visible = true; it.clean = true; }
+        if (it.x > P.x1) {
+          it.state = 'fall'; it.vy = 0; it.y = P.y;
+          const n = WS.resting.length;
+          it.tx = C.x + (Math.random() - 0.5) * 2 * C.half; it.tz = (Math.random() - 0.5) * 2 * C.half;
+          it.ty = C.floor + Math.min(0.28, n * it.half * 0.22);
+        }
+      } else if (it.state === 'fall') {
+        it.vy -= 9.8 * dt; it.y += it.vy * dt;
+        const o = it.outer.position;
+        o.x += (it.tx - o.x) * Math.min(1, dt * 5); o.z += (it.tz - o.z) * Math.min(1, dt * 5); o.y = it.y;
+        it.roll.rotation.z += dt * 2;
+        if (it.y <= it.ty) {
+          o.y = it.ty; it.state = 'rest';
+          WS.items.splice(i, 1); WS.resting.push(it); WS.count++;
+          if (state.view === 'washer') washerStats();
+          if (WS.resting.length > 18) WS.itemsGroup.remove(WS.resting.shift().outer);
+        }
+      }
+    }
+    WS.built.flaps.forEach((f) => {
+      const near = WS.items.some((it) => it.state === 'belt' && Math.abs(it.x - f.x) < 0.2);
+      const target = near ? 0.75 : 0;
+      f.pivot.rotation.z += (target - f.pivot.rotation.z) * Math.min(1, dt * 8);
+    });
+    const { pos, vel } = WS.pdata, nz = WS.built.nozzles;
+    for (let i = 0; i < pos.length / 3; i++) {
+      pos[i * 3] += vel[i * 3] * dt; pos[i * 3 + 1] += vel[i * 3 + 1] * dt; pos[i * 3 + 2] += vel[i * 3 + 2] * dt;
+      if (pos[i * 3 + 1] < P.y + 0.02) { const n = nz[i % nz.length]; pos[i * 3] = n.x; pos[i * 3 + 1] = n.y; pos[i * 3 + 2] = n.z; }
+    }
+    WS.particles.geometry.attributes.position.needsUpdate = true;
+  }
+
+  // ---------- build and camera ----------
+  function build() {
+    clearGroup();
+    const v = state.view, C = crop();
+    if (WS.built) WS.built.group.visible = v === 'washer';
+    WS.itemsGroup.visible = v === 'washer';
+    scene.environment = v === 'washer' ? environment() : null;
+    let stats;
+    if (v === 'plant') stats = buildPlant();
+    else if (v === 'field') stats = buildField();
+    else if (v === 'produce') stats = buildProduce();
+    else stats = buildWasher();
+    if (stats) $('stats').innerHTML = stats.join(''); else washerStats();
+    const st = C.STAGES[state.stage];
+    uH.value = Math.max(0.15, st.height); uStiff.value = C.stiff;
+    $('pull').hidden = !(C.rootDepth && v === 'plant');
+    state.pulled = false; $('pull').textContent = 'Pull up';
+    $('tag-dirty').hidden = $('tag-clean').hidden = v !== 'produce';
+    $('grow-controls').hidden = v === 'produce' || v === 'washer';
+    $('washer-controls').hidden = v !== 'washer';
+    $('eyebrow').textContent = v === 'washer' ? 'Fieldworks · washing station' : v === 'produce' ? 'Fieldworks · harvested produce' : 'Fieldworks · crop models';
+    $('title').textContent = v === 'washer' ? 'Washing station' : v === 'produce' ? C.item : C.name;
+    $('note').textContent = v === 'washer'
+      ? `Dirty ${C.item.toLowerCase()}s ride the infeed belt through rubber flaps, roll over nine spinning brushes under two spray bars, and leave clean on the outfeed belt, which drops them into the crate. Pick another crop above to wash that instead.`
+      : v === 'produce' ? `Straight from the field on the left, after the washer on the right: the soil patches and clods come off and the skin is left wet.`
+      : C.note;
+  }
+
+  function frameCamera() {
+    const C = crop(), h = C.STAGES[state.stage].height, v = state.view;
+    controls.minDistance = 0.12;
+    if (v === 'plant') {
+      const spread = C.spread || 0, d = 0.5 + h + spread * 0.55 + (C.rootDepth ? 0.35 : 0);
+      controls.target.set(0, Math.max(0.06, h * 0.5) + (C.rootDepth ? 0.1 : 0), 0);
+      camera.position.set(d * 0.75, h * 0.55 + 0.2 + spread * 0.25, d * 0.75);
+      controls.maxDistance = 3 + h * 2 + spread * 2;
+    } else if (v === 'field') {
+      const s = C.field.size;
+      controls.target.set(0, h * 0.3, 0);
+      camera.position.set(s * 0.75, 1.2 + h * 1.3, s * 0.8);
+      controls.maxDistance = s * 2.4;
+    } else if (v === 'produce') {
+      const g = itemGeo(state.crop, 1, true), s = Math.max(g.userData.length, g.userData.half * 2), d = Math.max(0.3, s * 2.3 + 0.2);
+      controls.target.set(0, g.userData.half + 0.02, 0);
+      camera.position.set(0.05, g.userData.half + d * 0.42, d);
+      controls.maxDistance = d * 3;
+    } else {
+      controls.target.set(0.1, 0.85, 0);
+      camera.position.set(2.5, 2.1, 3.5);
+      controls.minDistance = 0.8; controls.maxDistance = 9;
+    }
+    controls.update();
+  }
+
+  // ---------- UI ----------
+  Object.entries(CROPS).forEach(([k, c]) => {
+    const b = document.createElement('button');
+    b.type = 'button'; b.className = 'crop'; b.id = 'crop-' + k;
+    b.innerHTML = `<span class="dot" style="background:${c.dot}"></span>${c.short}`;
+    b.onclick = () => {
+      if (state.crop === k) return;
+      state.crop = k; state.stage = 4;
+      if (WS.built) resetWasher();
+      renderControls(); sync(); frameCamera();
+    };
+    $('crops').appendChild(b);
+  });
+  function renderControls() {
+    const C = crop();
+    $('stages').innerHTML = '';
+    C.STAGES.forEach((s, i) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'stage'; b.id = 'stage-' + i;
+      b.innerHTML = `<span class="n">${i + 1} · d${s.day}</span><span class="nm">${s.name}</span>`;
+      b.onclick = () => { state.stage = i; sync(); if (state.view === 'plant') frameCamera(); };
+      $('stages').appendChild(b);
+    });
+    $('conds').innerHTML = '';
+    Object.entries(F.CONDITIONS).forEach(([k, name]) => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.className = 'chip'; b.id = 'cond-' + k;
+      b.innerHTML = `<span class="dot" style="background:${k === 'rust' ? C.spot : COND_COLORS[k]}"></span>${k === 'rust' ? C.disease : name}`;
+      b.onclick = () => { state.cond = k; sync(); };
+      $('conds').appendChild(b);
+    });
+  }
+  ['plant', 'field', 'produce', 'washer'].forEach((v) => { $('view-' + v).onclick = () => { if (state.view === v) return; state.view = v; sync(); frameCamera(); }; });
+  $('wind').onclick = () => { state.wind = !state.wind; syncButtons(); };
+  $('pull').onclick = () => {
+    state.pulled = !state.pulled;
+    $('pull').textContent = state.pulled ? 'Put back' : 'Pull up';
+    if (plantMesh) plantMesh.userData.liftTo = state.pulled ? crop().rootDepth[state.stage] + 0.05 : 0;
+  };
+  Object.keys(SPEEDS).forEach((k) => { $('speed-' + k).onclick = () => { state.speed = k; WS.spawnT = Math.min(WS.spawnT, 0.6); syncButtons(); if (state.view === 'washer') washerStats(); }; });
+  $('run').onclick = () => { state.running = !state.running; syncButtons(); };
+
+  function syncButtons() {
+    Object.keys(CROPS).forEach((k) => $('crop-' + k).setAttribute('aria-pressed', String(k === state.crop)));
+    crop().STAGES.forEach((_, i) => $('stage-' + i).setAttribute('aria-pressed', String(i === state.stage)));
+    Object.keys(F.CONDITIONS).forEach((k) => $('cond-' + k).setAttribute('aria-pressed', String(k === state.cond)));
+    ['plant', 'field', 'produce', 'washer'].forEach((v) => $('view-' + v).setAttribute('aria-pressed', String(v === state.view)));
+    $('wind').setAttribute('aria-pressed', String(state.wind)); $('wind').textContent = state.wind ? 'Wind on' : 'Wind off';
+    Object.keys(SPEEDS).forEach((k) => $('speed-' + k).setAttribute('aria-pressed', String(k === state.speed)));
+    $('run').setAttribute('aria-pressed', String(state.running)); $('run').textContent = state.running ? 'Running' : 'Paused';
+  }
+  function sync() { syncButtons(); build(); }
+
+  function resize() {
+    const w = host.clientWidth, h = host.clientHeight;
+    renderer.setSize(w, h, false);
+    camera.aspect = w / Math.max(1, h); camera.updateProjectionMatrix();
+  }
+  new ResizeObserver(resize).observe(host);
+
+  const clock = new THREE.Clock();
+  function loop() {
+    const dt = Math.min(clock.getDelta(), 0.05);
+    const target = state.wind ? (state.cond === 'dry' ? 1.3 : 1) : 0;
+    uWind.value += (target - uWind.value) * Math.min(1, dt * 3);
+    uTime.value += dt;
+    if (plantMesh) plantMesh.position.y += (plantMesh.userData.liftTo - plantMesh.position.y) * Math.min(1, dt * 5);
+    if (produce && !reduceMotion) { produce.a.outer.rotation.y += dt * 0.4; produce.b.outer.rotation.y += dt * 0.4; }
+    if (WS.built && state.view === 'washer') updateWasher(dt);
+    controls.update();
+    renderer.render(scene, camera);
+    requestAnimationFrame(loop);
+  }
+
+  renderControls(); sync(); frameCamera(); resize(); loop();
+})();
+</script>
+
+</html>
