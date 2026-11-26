@@ -254,8 +254,8 @@ const SIMS = { washer: sim, robot: rsim, generator: gsim };
 // ---------- produce ----------
 const L = window.FWCrops ? FWCrops.leafTexture() : null;
 const leafTex = L ? Object.assign(new THREE.DataTexture(L.data, L.width, L.height), { generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, needsUpdate: true }) : null;
-const mkMat = (rough) => { const m = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: rough, map: leafTex }); if (L) m.color.setScalar(L.colorBoost); m.envMapIntensity = 0.5; return m; };
-const dirtyMat = mkMat(0.92), cleanMat = mkMat(0.45);
+const mkMat = (rough) => window.FWCrops ? FWCrops.makeMaterials({ map: leafTex, colorBoost: L.colorBoost, roughness: rough, envMapIntensity: 0.5 }) : new THREE.MeshStandardMaterial({ roughness: 0.5 });
+const dirtyMat = mkMat(1.4), cleanMat = mkMat(0.85);
 const geoCache = new Map();
 function itemGeo(key, seed, dirty) {
   const k = key + seed + dirty;

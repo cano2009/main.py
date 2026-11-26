@@ -194,9 +194,10 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   leafTex.generateMipmaps = true; leafTex.minFilter = THREE.LinearMipmapLinearFilter; leafTex.magFilter = THREE.LinearFilter; leafTex.needsUpdate = true;
   const uTime = { value: 0 }, uWind = { value: 1 }, uH = { value: 0.9 }, uStiff = { value: 1 };
   function cropMaterial(rough, wind) {
-    const m = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: rough, metalness: 0, map: leafTex });
-    m.color.setScalar(LT.colorBoost);
-    if (wind) m.onBeforeCompile = (sh) => {
+    return F.makeMaterials({ map: leafTex, colorBoost: LT.colorBoost, roughness: rough, onBeforeCompile: wind ? windShader : null });
+  }
+  function windShader(sh) {
+    {
       Object.assign(sh.uniforms, { uTime, uWind, uH, uStiff });
       sh.vertexShader = 'uniform float uTime; uniform float uWind; uniform float uH; uniform float uStiff;\n' + sh.vertexShader.replace('#include <begin_vertex>', `
         #include <begin_vertex>
@@ -210,14 +211,29 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
         float sway = (sin(uTime * 1.9 + ph) * 0.55 + sin(uTime * 3.3 + ph * 2.1) * 0.2) * uWind * gust * uStiff * uH * 0.3;
         transformed.x += sway * hgt * hgt;
         transformed.z += sway * hgt * hgt * 0.38;`);
-    };
-    return m;
+    }
   }
-  const plantMat = cropMaterial(0.82, true);
-  const dirtyMat = cropMaterial(0.92, false);
-  const cleanMat = cropMaterial(0.5, false);
-  dirtyMat.envMapIntensity = 0.45; cleanMat.envMapIntensity = 0.6;
-  const soilMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.96 });
+  const plantMat = cropMaterial(1, true);
+  const dirtyMat = cropMaterial(1.35, false).map((m) => { m.roughness = Math.min(1, Math.max(0.88, m.roughness)); m.envMapIntensity = 0.45; return m; });
+  const cleanMat = cropMaterial(0.85, false).map((m) => { m.envMapIntensity = 0.7; return m; });
+  function soilTex(dry) {
+    const t = F.soilTexture({ size: 512, dry });
+    const mk = (data, enc) => { const x = new THREE.DataTexture(data, t.width, t.height); x.wrapS = x.wrapT = THREE.RepeatWrapping; x.generateMipmaps = true; x.minFilter = THREE.LinearMipmapLinearFilter; x.magFilter = THREE.LinearFilter; x.anisotropy = 8; x.encoding = enc; x.needsUpdate = true; return x; };
+    return { map: mk(t.albedo, THREE.sRGBEncoding), normal: mk(t.normal, THREE.LinearEncoding) };
+  }
+  const SOIL = { wet: soilTex(false), dry: soilTex(true) };
+  const soilMats = {};
+  function soilMaterial(cond, size) {
+    const k = (cond === 'dry' ? 'dry' : 'wet') + size;
+    if (!soilMats[k]) {
+      const s = cond === 'dry' ? SOIL.dry : SOIL.wet;
+      const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: cond === 'dry' ? 0.97 : 0.9, map: s.map.clone(), normalMap: s.normal.clone(), normalScale: new THREE.Vector2(1.1, 1.1) });
+      m.map.repeat.set(size / 1.1, size / 1.1); m.normalMap.repeat.copy(m.map.repeat); m.map.needsUpdate = m.normalMap.needsUpdate = true;
+      soilMats[k] = m;
+    }
+    return soilMats[k];
+  }
+  const soilMat = soilMaterial('healthy', 2.4);
   const clodMat = new THREE.MeshStandardMaterial({ roughness: 0.95 });
   const grassMat = new THREE.MeshStandardMaterial({ color: new THREE.Color('#6f7f3e').convertSRGBToLinear(), roughness: 1 });
   const woodMat = new THREE.MeshStandardMaterial({ color: new THREE.Color('#9a7550').convertSRGBToLinear(), roughness: 0.8 });
@@ -226,8 +242,8 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     const g = new THREE.PlaneGeometry(size, size, seg, seg);
     g.rotateX(-Math.PI / 2);
     const pos = g.attributes.position, cols = [], r = F.rng(11);
-    const low = new THREE.Color(cond === 'dry' ? '#8a6a46' : '#4b3424').convertSRGBToLinear();
-    const top = new THREE.Color(cond === 'dry' ? '#a7865c' : '#6b4d33').convertSRGBToLinear();
+    const low = new THREE.Color('#9a9a9a').convertSRGBToLinear();
+    const top = new THREE.Color('#ffffff').convertSRGBToLinear();
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), z = pos.getZ(i), ridge = Math.cos((x / row) * Math.PI * 2);
       const edge = Math.max(0, Math.max(Math.abs(x), Math.abs(z)) - size / 2 + 0.15) / 0.15;
@@ -237,7 +253,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     }
     g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
     g.computeVertexNormals();
-    const m = new THREE.Mesh(g, soilMat); m.receiveShadow = true;
+    const m = new THREE.Mesh(g, soilMaterial(cond, size)); m.receiveShadow = true;
     return m;
   }
   function clods(size, n, cond) {
@@ -258,9 +274,9 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
   // ---------- geometry caches ----------
   const cache = new Map();
-  function plantGeo(stage, cond, seed, stems) {
-    const k = ['p', state.crop, stage, cond, seed, stems || 0].join('|');
-    if (!cache.has(k)) cache.set(k, crop().clump({ stage, condition: cond, seed, stems }));
+  function plantGeo(stage, cond, seed, stems, lod) {
+    const k = ['p', state.crop, stage, cond, seed, stems || 0, lod || 0].join('|');
+    if (!cache.has(k)) cache.set(k, crop().clump({ stage, condition: cond, seed, stems, lod }));
     return cache.get(k);
   }
   function itemGeo(key, seed, dirty) {
@@ -295,7 +311,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   function clearGroup() {
     if (group) {
       scene.remove(group);
-      group.traverse((o) => { if (o.isMesh && (o.material === soilMat || o.material === woodMat)) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); });
+      group.traverse((o) => { if (o.isMesh && (o.geometry.type === 'PlaneGeometry' || o.material === woodMat)) o.geometry.dispose(); if (o.isInstancedMesh) o.dispose(); });
     }
     group = new THREE.Group(); scene.add(group); plantMesh = null; produce = null;
   }
@@ -324,7 +340,7 @@ button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     const C = crop(), st = C.STAGES[state.stage], f = C.field, size = f.size;
     group.add(soil(size, Math.round(size * 34), f.row, state.cond));
     const stems = f.stems ? f.stems(state.stage) : undefined;
-    const variants = [11, 12, 13].map((s) => plantGeo(state.stage, state.cond, s, stems));
+    const variants = [11, 12, 13].map((s) => plantGeo(state.stage, state.cond, s, stems, f.lod || 0));
     const r = F.rng(99), spots = [];
     for (let x = -size / 2 + Math.max(0.2, f.row / 2); x <= size / 2 - 0.15 + 1e-6; x += f.row)
       for (let z = -size / 2 + f.step; z <= size / 2 - f.step / 2; z += f.step) spots.push([x + (r() - 0.5) * 0.03, z + (r() - 0.5) * f.step * 0.35]);
