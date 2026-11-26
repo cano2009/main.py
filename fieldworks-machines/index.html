@@ -1,0 +1,361 @@
+<title>Fieldworks WS-300</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: machine viewer. Header with wallet, the 3D yard, a live status strip with controls, and an inspection sheet
+   (right drawer on wide screens, bottom sheet on phones). Single dark look, like the earlier Fieldworks pages. */
+:root {
+  --bg: #15120d; --panel: #1f1a13; --panel-2: #2a2318; --line: #3a3124; --fg: #efe6d2; --muted: #a89a80;
+  --accent: #e0b552; --accent-ink: #1b150b;
+  --ok: #3fd27a; --warn: #ffae1a; --bad: #ff5a48; --off: #8a8f96; --water: #2fd6ff;
+  --font-display: 'Bricolage Grotesque', 'Arial Narrow', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.45; }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px 28px; display: grid; gap: 14px; }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px 16px; }
+.eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+h1 { margin: 2px 0 0; font-family: var(--font-display); font-weight: 800; font-size: clamp(26px, 6vw, 40px); line-height: 1; letter-spacing: -0.02em; }
+.wallet { font-family: var(--font-mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.wallet b { color: var(--fg); font-size: 18px; font-weight: 500; }
+.stage { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+@media (min-width: 900px) { .stage.inspecting { grid-template-columns: minmax(0, 1fr) 340px; } }
+.viewport { position: relative; width: 100%; aspect-ratio: 16 / 10; min-height: 340px; max-height: 70vh; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: #6f8aa0; }
+@media (max-width: 640px) { .viewport { aspect-ratio: 4 / 4.4; } }
+.viewport canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.hint { position: absolute; left: 10px; bottom: 10px; font-family: var(--font-mono); font-size: 11px; color: #f5efe0; background: rgba(21,18,13,0.6); padding: 4px 8px; border-radius: 6px; pointer-events: none; }
+.chip-status { position: absolute; left: 10px; top: 10px; display: inline-flex; align-items: center; gap: 8px; font: 600 12px var(--font-body); background: rgba(21,18,13,0.72); color: var(--fg); padding: 6px 11px; border-radius: 999px; }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--off); }
+.strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; min-width: 0; }
+.stat .k { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.stat .v { font-family: var(--font-mono); font-size: 18px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meter { height: 5px; background: #2d261b; border-radius: 3px; margin-top: 6px; overflow: hidden; }
+.meter i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.25s; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn { font: 600 13.5px var(--font-body); color: var(--fg); background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 13px; cursor: pointer; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:focus-visible, .chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sep { flex: 1; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.label { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-right: 2px; }
+.chip { font: 500 13px var(--font-body); color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+.chip[aria-pressed="true"] { border-color: var(--fg); background: var(--panel-2); }
+.sheet { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+@media (min-width: 900px) { .sheet { max-height: 70vh; overflow: auto; } }
+.sheet-head { display: flex; justify-content: space-between; align-items: start; gap: 10px; }
+.sheet h2 { margin: 0; font-family: var(--font-display); font-size: 22px; line-height: 1.1; }
+.sheet .sub { color: var(--muted); font-size: 13px; }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.tab { font: 600 12.5px var(--font-body); color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; cursor: pointer; }
+.tab[aria-selected="true"] { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; }
+dt { color: var(--muted); font-size: 13px; }
+dd { margin: 0; text-align: right; font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.pill { display: inline-block; font: 600 11.5px var(--font-body); padding: 3px 9px; border-radius: 999px; background: #2d261b; }
+.note { color: var(--muted); font-size: 13px; margin: 0; max-width: 70ch; }
+.log { font-family: var(--font-mono); font-size: 12px; color: var(--muted); display: grid; gap: 3px; }
+.toast { position: absolute; left: 50%; top: 52px; transform: translateX(-50%); background: rgba(21,18,13,0.85); border: 1px solid var(--line); padding: 7px 12px; border-radius: 8px; font-size: 13px; pointer-events: none; opacity: 0; transition: opacity 0.3s; white-space: nowrap; }
+.toast.show { opacity: 1; }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow">Fieldworks Machinery · processing</div>
+      <h1>WS-300 Brush Washer</h1>
+    </div>
+    <div class="wallet">Farm account <b id="wallet">$6,000</b></div>
+  </header>
+
+  <div class="stage" id="stage">
+    <div class="viewport" id="viewport">
+      <span class="chip-status"><span class="dot" id="st-dot"></span><span id="st-text">Starting</span></span>
+      <div class="toast" id="toast" role="status"></div>
+      <div class="hint">Drag to turn · pinch to zoom · tap the machine to inspect</div>
+    </div>
+    <aside class="sheet" id="sheet" hidden aria-label="Machine information">
+      <div class="sheet-head">
+        <div>
+          <h2 id="i-name">WS-300 Brush Washer</h2>
+          <div class="sub" id="i-sub">Fieldworks Machinery</div>
+        </div>
+        <button type="button" class="btn" id="close">Close</button>
+      </div>
+      <div class="tabs" role="tablist">
+        <button type="button" class="tab" role="tab" id="tab-overview" aria-selected="true">Overview</button>
+        <button type="button" class="tab" role="tab" id="tab-performance" aria-selected="false">Performance</button>
+        <button type="button" class="tab" role="tab" id="tab-resources" aria-selected="false">Resources</button>
+        <button type="button" class="tab" role="tab" id="tab-upgrades" aria-selected="false">Upgrades</button>
+        <button type="button" class="tab" role="tab" id="tab-operation" aria-selected="false">Operation</button>
+      </div>
+      <div id="tab-body"></div>
+    </aside>
+  </div>
+
+  <div class="strip" aria-live="off">
+    <div class="stat"><div class="k">Throughput</div><div class="v" id="s-tp">0.0 /min</div></div>
+    <div class="stat"><div class="k">Power</div><div class="v" id="s-kw">0.0 kW</div></div>
+    <div class="stat"><div class="k">Spray</div><div class="v" id="s-bar">0.0 bar</div></div>
+    <div class="stat"><div class="k">Motor</div><div class="v" id="s-temp">18 °C</div></div>
+    <div class="stat"><div class="k">Water</div><div class="v" id="s-water">0 L</div><div class="meter"><i id="m-water" style="background:var(--water)"></i></div></div>
+    <div class="stat"><div class="k">Condition</div><div class="v" id="s-cond">100%</div><div class="meter"><i id="m-cond"></i></div></div>
+    <div class="stat"><div class="k">Output crate</div><div class="v" id="s-out">0 / 24</div><div class="meter"><i id="m-out"></i></div></div>
+  </div>
+
+  <div class="controls">
+    <button type="button" class="btn primary" id="b-inspect">Inspect machine</button>
+    <button type="button" class="btn" id="b-power">Stop</button>
+    <button type="button" class="btn" id="b-empty">Sell crate</button>
+    <button type="button" class="btn" id="b-repair">Service</button>
+    <button type="button" class="btn" id="b-upgrade">Upgrade</button>
+    <span class="sep"></span>
+    <div class="chips" role="group" aria-label="Produce">
+      <span class="label">Produce</span>
+      <button type="button" class="chip" id="crop-pumpkin" aria-pressed="true">Pumpkin</button>
+      <button type="button" class="chip" id="crop-potato" aria-pressed="false">Potato</button>
+      <button type="button" class="chip" id="crop-carrot" aria-pressed="false">Carrot</button>
+      <button type="button" class="chip" id="crop-cabbage" aria-pressed="false">Cabbage</button>
+      <button type="button" class="chip" id="crop-watermelon" aria-pressed="false">Melon</button>
+    </div>
+  </div>
+  <p class="note">Everything on the screens, gauges, lights and in the inspection panel comes from the machine's own simulation: items actually washed, water actually used, wear from actual running time. Leave it running and the brushes wear down, the motor warms up, and the crate fills until you sell it.</p>
+</div>
+
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.module.js","three/examples/jsm/":"https://cdn.jsdelivr.net/npm/three@0.147.0/examples/jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { createGraphics } from './graphics.js';
+import { createGlow } from './glow.js';
+import { createOutlines } from './outline.js';
+import * as P from './parts.js';
+import { build, conveyor, BELT_Y } from './washer.js';
+import { Machine, WASHER_DEF } from './machine.js';
+
+window.THREE = THREE;
+await new Promise((r) => { const s = document.createElement('script'); s.src = 'crops.js'; s.onload = r; s.onerror = r; document.head.appendChild(s); });
+const $ = (id) => document.getElementById(id);
+const VALUE = { pumpkin: 9, potato: 1.2, carrot: 0.8, cabbage: 3.5, watermelon: 7 };
+const SUPPLY_S = { pumpkin: 4.2, potato: 2.2, carrot: 2.4, cabbage: 3.2, watermelon: 4.6 };
+
+// ---------- renderer ----------
+const host = $('viewport');
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+host.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+scene.background = new THREE.Color('#a9bfcc');
+scene.fog = new THREE.Fog(new THREE.Color('#cdbf98'), 18, 70);
+scene.add(new THREE.HemisphereLight(new THREE.Color('#cfe0f0'), new THREE.Color('#5a4630'), 0.7));
+const sun = new THREE.DirectionalLight(new THREE.Color('#fff1d6'), 2.3);
+sun.position.set(5, 8, 6); sun.castShadow = true;
+Object.assign(sun.shadow.camera, { left: -6, right: 6, top: 6, bottom: -6, far: 40 });
+sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02;
+scene.add(sun);
+const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 200);
+camera.position.set(3.1, 2.3, 4.6);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(-0.1, 0.85, 0); controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.48; controls.minDistance = 1.2; controls.maxDistance = 11;
+const touch = matchMedia('(pointer: coarse)').matches || innerWidth < 700;
+const gfx = createGraphics({ renderer, scene, camera, sun, storageKey: 'fw.ws300.gfx' });
+if (touch) gfx.setPreset('medium');
+gfx.setGrade('farm', 0);
+gfx.setEnvironment('room');
+const glow = createGlow({ scene, quality: touch ? 'medium' : 'high' });
+const outlines = createOutlines({ gfx, scene, camera, quality: touch ? 'low' : 'high' });
+
+// ---------- yard ----------
+const ground = new THREE.Mesh(new THREE.CircleGeometry(90, 48).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: new THREE.Color('#6f7f3e').convertSRGBToLinear(), roughness: 1 }));
+ground.position.y = -0.02; ground.receiveShadow = true; scene.add(ground);
+(function pad() {
+  const g = new THREE.PlaneGeometry(10.5, 5.4, 105, 54).rotateX(-Math.PI / 2);
+  const pos = g.attributes.position, cols = [], base = new THREE.Color('#8f8c86').convertSRGBToLinear(), yel = new THREE.Color('#e0aa2a').convertSRGBToLinear();
+  let seed = 7; const r = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i);
+    let c = base.clone().multiplyScalar(0.88 + r() * 0.16);
+    if (Math.abs(((x + 5.25) % 1.5) - 0.75) > 0.73 || Math.abs(((z + 2.7) % 1.5) - 0.75) > 0.73) c.multiplyScalar(0.8);
+    if (Math.abs(z - 1.55) < 0.05 || Math.abs(z + 1.9) < 0.05) c = yel.clone();
+    cols.push(c.r, c.g, c.b);
+  }
+  g.setAttribute('color', new THREE.Float32BufferAttribute(cols, 3));
+  const m = new THREE.Mesh(g, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9 })); m.position.set(0.1, 0.001, -0.15); m.receiveShadow = true; scene.add(m);
+})();
+
+// ---------- machine ----------
+const M = P.materials();
+const ws = build(M);
+scene.add(ws.root);
+const infeed = conveyor(-3.4, -1.02, M, { driveAt: 'tail' }); scene.add(infeed.group);
+const outfeed = conveyor(1.02, 3.2, M, { driveAt: 'head' }); scene.add(outfeed.group);
+// crate on a pallet at the end
+const crateG = new THREE.Group(); crateG.position.set(3.62, 0, 0); scene.add(crateG);
+const wood = new THREE.MeshStandardMaterial({ color: new THREE.Color('#a27b4d').convertSRGBToLinear(), roughness: 0.85 });
+const woodD = new THREE.MeshStandardMaterial({ color: new THREE.Color('#7d5a36').convertSRGBToLinear(), roughness: 0.9 });
+for (let k = 0; k < 5; k++) { const p = P.panel(0.8, 0.022, 0.13, wood, 0.004); p.position.set(0, 0.07, -0.34 + k * 0.17); crateG.add(p); }
+[-1, 0, 1].forEach((k) => { const p = P.panel(0.1, 0.06, 0.8, woodD, 0.006); p.position.set(k * 0.35, 0.03, 0); crateG.add(p); });
+for (let rr = 0; rr < 3; rr++) { const y = 0.15 + rr * 0.15; [[0, 0.36, 0.74, 0.024], [0, -0.36, 0.74, 0.024]].forEach(([x, z, w, d]) => { const b = P.panel(w, 0.11, d, wood, 0.004); b.position.set(x, y, z); crateG.add(b); }); [0.36, -0.36].forEach((x) => { const b = P.panel(0.024, 0.11, 0.74, wood, 0.004); b.position.set(x, y, 0); crateG.add(b); }); }
+const chute = P.panel(0.4, 0.02, 0.56, M.stainless, 0.004); chute.position.set(3.33, BELT_Y - 0.1, 0); chute.rotation.z = -0.5; scene.add(chute);
+
+// lights that show state
+const gM = glow.attach(ws.machine, { state: 'running' });
+gM.stackLight({ position: new THREE.Vector3(0.82, ws.HOOD_T + 0.05, 0.38) });
+gM.strip({ from: new THREE.Vector3(-ws.X + 0.06, ws.HOOD_T - 0.03, ws.Z + 0.045), to: new THREE.Vector3(ws.X - 0.06, ws.HOOD_T - 0.03, ws.Z + 0.045), width: 0.012 });
+gM.led({ position: ws.live.cabinetLed, size: 0.012 });
+const gPump = glow.attach(ws.root, { state: 'flow' });
+gPump.led({ position: new THREE.Vector3(-0.48, 0.32, -0.98), size: 0.014 });
+const gIn = glow.attach(infeed.group, { state: 'running' }); gIn.strip({ from: new THREE.Vector3(-3.38, BELT_Y - 0.12, 0.33), to: new THREE.Vector3(-1.05, BELT_Y - 0.12, 0.33), width: 0.01 });
+const gOut = glow.attach(outfeed.group, { state: 'running' }); gOut.strip({ from: new THREE.Vector3(1.05, BELT_Y - 0.12, 0.33), to: new THREE.Vector3(3.18, BELT_Y - 0.12, 0.33), width: 0.01 });
+outlines.register(ws.root); outlines.register(ws.console);
+
+// ---------- simulation and produce ----------
+const sim = new Machine(WASHER_DEF);
+let wallet = 6000, crop = 'pumpkin', supplyT = 0;
+const L = window.FWCrops ? FWCrops.leafTexture() : null;
+const leafTex = L ? Object.assign(new THREE.DataTexture(L.data, L.width, L.height), { generateMipmaps: true, minFilter: THREE.LinearMipmapLinearFilter, needsUpdate: true }) : null;
+const mkMat = (rough) => { const m = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: rough, map: leafTex }); if (L) m.color.setScalar(L.colorBoost); m.envMapIntensity = 0.5; return m; };
+const dirtyMat = mkMat(0.92), cleanMat = mkMat(0.45);
+const geoCache = new Map();
+function itemGeo(key, seed, dirty) {
+  const k = key + seed + dirty;
+  if (!geoCache.has(k)) {
+    const g = window.FWCrops ? FWCrops.CROPS[key].produce({ seed, dirty }) : new THREE.SphereGeometry(0.1, 16, 12);
+    g.computeBoundingBox(); const bb = g.boundingBox;
+    g.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2);
+    geoCache.set(k, g);
+  }
+  return geoCache.get(k);
+}
+const items = [];   // every item in the scene: { obj, dirtyM, cleanM, x, stage: 'infeed'|'machine'|'outfeed'|'fall'|'crate', crop, len }
+function spawn() {
+  if (!sim.canAccept() || items.filter((i) => i.stage === 'infeed' && i.x < -3.0).length) return;
+  const seed = 1 + Math.floor(Math.random() * 3), gD = itemGeo(crop, seed, true), gC = itemGeo(crop, seed, false);
+  const obj = new THREE.Group(), dm = new THREE.Mesh(gD, dirtyMat), cm = new THREE.Mesh(gC, cleanMat);
+  [dm, cm].forEach((m) => { m.castShadow = true; m.receiveShadow = true; obj.add(m); }); cm.visible = false;
+  obj.rotation.y = (Math.random() - 0.5) * 0.4;
+  gD.computeBoundingBox(); const len = gD.boundingBox.max.x - gD.boundingBox.min.x;
+  const it = { obj, dm, cm, x: -3.3, z: (Math.random() - 0.5) * 0.1, stage: 'infeed', crop, len: Math.max(0.08, len), label: crop };
+  obj.position.set(it.x, BELT_Y, it.z); scene.add(obj);
+  items.push(it); sim.feed(it);
+}
+function flowItems(dt) {
+  const v = sim.status() === 'running' || sim.status() === 'waiting' ? sim.level.beltSpeed : 0;
+  // infeed queue: line up behind the entrance in buffer order
+  let edge = -1.0;
+  sim.inBuffer.forEach((it) => { const target = edge - it.len / 2 - 0.03; it.x = Math.min(target, it.x + v * dt * 1.2); edge = it.x - it.len / 2; it.obj.position.x = it.x; });
+  // inside the washer: position from processing progress
+  sim.slots.forEach((s) => { const it = s.item; it.stage = 'machine'; it.x = -0.8 + s.progress * 1.6; it.obj.position.set(it.x, BELT_Y + 0.004 + 0.005 * Math.abs(Math.sin(it.x * 30)), it.z); if (s.progress > 0.45 && !it.cleanShown) { it.dm.visible = false; it.cm.visible = true; it.cleanShown = true; } });
+  // after the washer: ride the outfeed, drop into the crate
+  const crateCount = items.filter((i) => i.stage === 'crate').length;
+  items.forEach((it) => {
+    if (it.stage === 'machine' && sim.outBuffer.includes(it)) { it.stage = 'outfeed'; it.dm.visible = false; it.cm.visible = true; }
+    if (it.stage === 'outfeed') { it.x += sim.level.beltSpeed * dt * (sim.status() === 'off' ? 0 : 1); it.obj.position.x = it.x; if (it.x > 3.22) { it.stage = 'fall'; it.vy = 0; it.tx = 3.62 + (Math.random() - 0.5) * 0.5; it.tz = (Math.random() - 0.5) * 0.5; it.ty = 0.1 + Math.min(0.3, crateCount * 0.012); } }
+    if (it.stage === 'fall') { it.vy -= 9.8 * dt; const o = it.obj.position; o.y += it.vy * dt; o.x += (it.tx - o.x) * Math.min(1, dt * 5); o.z += (it.tz - o.z) * Math.min(1, dt * 5); it.obj.rotation.z += dt * 2; if (o.y <= it.ty) { o.y = it.ty; it.stage = 'crate'; } }
+  });
+}
+function sellCrate() {
+  let n = 0, money = 0;
+  while (sim.outBuffer.length) { const it = sim.take(); n++; money += VALUE[it.crop] || 1; }
+  for (let i = items.length - 1; i >= 0; i--) if (items[i].stage === 'crate' || (items[i].stage !== 'infeed' && items[i].stage !== 'machine' && !sim.outBuffer.includes(items[i]))) { scene.remove(items[i].obj); items.splice(i, 1); }
+  wallet += money; toast(n ? `Sold ${n} washed ${crop}${n === 1 ? '' : 's'} for $${money.toFixed(0)}` : 'Crate is empty');
+}
+
+// ---------- UI ----------
+const fmt$ = (n) => '$' + Math.round(n).toLocaleString();
+const STC = { running: 'var(--ok)', waiting: 'var(--warn)', stopped: 'var(--bad)', off: 'var(--off)' };
+let toastT = 0;
+function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), 2200); }
+let tab = 'overview', inspecting = false;
+function openInspect(on) { inspecting = on; $('sheet').hidden = !on; $('stage').classList.toggle('inspecting', on); outlines.select(on ? ws.root : null); renderSheet(); requestAnimationFrame(resize); }
+['overview', 'performance', 'resources', 'upgrades', 'operation'].forEach((t) => { $('tab-' + t).onclick = () => { tab = t; ['overview', 'performance', 'resources', 'upgrades', 'operation'].forEach((u) => $('tab-' + u).setAttribute('aria-selected', String(u === t))); renderSheet(); }; });
+$('close').onclick = () => openInspect(false);
+$('b-inspect').onclick = () => openInspect(!inspecting);
+$('b-power').onclick = () => { sim.setOn(!sim.on); };
+$('b-empty').onclick = sellCrate;
+$('b-repair').onclick = () => { const c = sim.repairCost(); if (c > wallet) return toast('Not enough money for a service'); if (!c) return toast('Already in perfect condition'); wallet -= sim.repair(); toast(`Serviced for ${fmt$(c)}`); };
+$('b-upgrade').onclick = () => { const n = sim.nextLevel(); if (!n) return toast('Fully upgraded'); if (n.cost > wallet) return toast(`Upgrade needs ${fmt$(n.cost)}`); wallet -= sim.upgrade(); toast(`Upgraded to level ${n.level}`); };
+['pumpkin', 'potato', 'carrot', 'cabbage', 'watermelon'].forEach((k) => { $('crop-' + k).onclick = () => { crop = k; ['pumpkin', 'potato', 'carrot', 'cabbage', 'watermelon'].forEach((u) => $('crop-' + u).setAttribute('aria-pressed', String(u === k))); toast(`Field supply switched to ${k}`); }; });
+
+function row(k, v) { return `<dt>${k}</dt><dd>${v}</dd>`; }
+function renderSheet() {
+  if (!inspecting) return;
+  const s = sim.stats(), id = s.identity, p = s.performance, r = s.resources, u = s.upgrades, o = s.operation;
+  $('i-name').textContent = `${id.model} ${id.name}`;
+  $('i-sub').innerHTML = `${id.brand} · ${id.category} · <span class="pill" style="color:${STC[id.status]}">${id.status}</span>`;
+  let h = '';
+  if (tab === 'overview') h = `<dl>${row('Type', id.type)}${row('Model', id.model)}${row('Status', id.reason)}${row('Throughput', p.throughputPerMin.toFixed(1) + ' items/min')}${row('Power', p.powerKw.toFixed(2) + ' kW')}${row('Condition', Math.round(p.condition) + '%')}${row('Level', `${u.level} of ${u.maxLevel}`)}${row('Washed in total', p.totalDone)}</dl>`;
+  if (tab === 'performance') h = `<dl>${row('Throughput', p.throughputPerMin.toFixed(1) + ' /min')}${row('Maximum', Math.round(p.maxPerMin) + ' /min')}${row('Belt speed', p.beltSpeed.toFixed(2) + ' m/s')}${row('Processing slots', p.slots)}${row('Power draw', p.powerKw.toFixed(2) + ' kW')}${row('Rated power', p.ratedKw.toFixed(1) + ' kW')}${row('Water use', p.waterLpm + ' L/min')}${row('Spray pressure', p.sprayBar.toFixed(1) + ' bar')}${row('Efficiency', Math.round(p.efficiency * 100) + '%')}${row('Motor temperature', p.motorC.toFixed(1) + ' °C')}${row('Running hours', p.hours.toFixed(3) + ' h')}${row('Energy used', p.energyKwh.toFixed(3) + ' kWh')}${row('Water used', Math.round(p.waterUsedL) + ' L')}</dl>`;
+  if (tab === 'resources') h = `<dl>${row('Input', r.input)}${row('Input queue', `${r.inCount} / ${r.inCap}`)}${row('Being washed', r.processing)}${row('Output', r.output)}${row('Output crate', `${r.outCount} / ${r.outCap}`)}${row('Water tank', `${Math.round(r.water)} / ${r.waterCap} L`)}${row('Missing', r.missing.length ? r.missing.join(', ') : 'Nothing')}${row('Limits', r.limits.length ? r.limits.join(', ') : 'None')}</dl>`;
+  if (tab === 'upgrades') h = u.next ? `<dl>${row('Current level', `${u.level} of ${u.maxLevel}`)}${row('Next level', u.next.level)}${row('Cost', fmt$(u.next.cost))}${row('Parts', u.next.parts.join(', '))}</dl><div class="log">${u.next.gains.map((g) => '<div>' + g + '</div>').join('')}</div>` : `<dl>${row('Current level', `${u.level} of ${u.maxLevel}`)}${row('Next level', 'Fully upgraded')}</dl>`;
+  if (tab === 'operation') h = `<dl>${row('Current task', o.task)}${row('Progress', Math.round(o.progress * 100) + '%')}${row('Time left', o.remainingS ? o.remainingS.toFixed(1) + ' s' : '–')}${row('Fault', o.fault || 'None')}${row('Maintenance', o.maintenance)}${row('Service cost', fmt$(o.repairCost))}${row('Infeed', o.connections.infeed ? 'Connected' : 'Not connected')}${row('Outfeed', o.connections.outfeed ? 'Connected' : 'Not connected')}${row('Water supply', o.connections.water ? 'OK' : 'Empty')}${row('Power', o.connections.power ? 'OK' : 'No supply')}</dl><div class="log">${o.log.map((l) => `<div>${l.t.toFixed(0).padStart(4, ' ')}s  ${l.text}</div>`).join('') || '<div>No events yet</div>'}</div>`;
+  $('tab-body').innerHTML = h;
+}
+function renderStrip() {
+  const s = sim.stats(), p = s.performance, r = s.resources, st = s.identity.status;
+  $('s-tp').textContent = p.throughputPerMin.toFixed(1) + ' /min';
+  $('s-kw').textContent = p.powerKw.toFixed(1) + ' kW';
+  $('s-bar').textContent = p.sprayBar.toFixed(1) + ' bar';
+  $('s-temp').textContent = Math.round(p.motorC) + ' °C';
+  $('s-water').textContent = Math.round(r.water) + ' L'; $('m-water').style.width = (r.water / r.waterCap * 100) + '%';
+  $('s-cond').textContent = Math.round(p.condition) + '%'; $('m-cond').style.width = p.condition + '%'; $('m-cond').style.background = p.condition < 40 ? 'var(--bad)' : p.condition < 70 ? 'var(--warn)' : 'var(--ok)';
+  $('s-out').textContent = `${r.outCount} / ${r.outCap}`; $('m-out').style.width = (r.outCount / r.outCap * 100) + '%';
+  $('st-dot').style.background = STC[st]; $('st-text').textContent = s.identity.reason;
+  $('wallet').textContent = fmt$(wallet);
+  $('b-power').textContent = sim.on ? 'Stop' : 'Start';
+  const n = sim.nextLevel(); $('b-upgrade').textContent = n ? `Upgrade ${fmt$(n.cost)}` : 'Fully upgraded'; $('b-upgrade').disabled = !n;
+  $('b-repair').textContent = `Service ${fmt$(sim.repairCost())}`;
+  $('b-empty').textContent = r.outCount ? `Sell crate (${r.outCount})` : 'Sell crate';
+}
+
+// tap to inspect
+const down = { x: 0, y: 0 };
+renderer.domElement.addEventListener('pointerdown', (e) => { down.x = e.clientX; down.y = e.clientY; });
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) return;
+  const rc = renderer.domElement.getBoundingClientRect();
+  const hit = outlines.pick({ pointer: new THREE.Vector2(((e.clientX - rc.left) / rc.width) * 2 - 1, -((e.clientY - rc.top) / rc.height) * 2 + 1), reach: 30 });
+  if (hit) { tab = hit === ws.console ? 'operation' : 'overview'; ['overview', 'performance', 'resources', 'upgrades', 'operation'].forEach((u) => $('tab-' + u).setAttribute('aria-selected', String(u === tab))); openInspect(true); } else if (inspecting) openInspect(false);
+});
+renderer.domElement.addEventListener('pointermove', (e) => {
+  if (e.pointerType !== 'mouse') return;
+  const rc = renderer.domElement.getBoundingClientRect();
+  outlines.hover(outlines.pick({ pointer: new THREE.Vector2(((e.clientX - rc.left) / rc.width) * 2 - 1, -((e.clientY - rc.top) / rc.height) * 2 + 1), reach: 30 }));
+});
+
+function resize() { const w = host.clientWidth, h = host.clientHeight; camera.aspect = w / Math.max(1, h); camera.updateProjectionMatrix(); gfx.resize(w, h); outlines.resize(); }
+new ResizeObserver(resize).observe(host);
+
+// ---------- loop ----------
+const clock = new THREE.Clock();
+let uiT = 0;
+window.__fw = { camera, controls, sim, ws, items, spawn, sellCrate, outlines, openInspect, setTab: (t) => $('tab-' + t).click(), step: (s) => { for (let i = 0; i < s * 30; i++) tick(1 / 30); } };
+function tick(dt) {
+  supplyT -= dt;
+  if (supplyT <= 0) { spawn(); supplyT = SUPPLY_S[crop] / (0.7 + sim.levelIndex * 0.35); }
+  sim.tick(dt);
+  flowItems(dt);
+  const s = sim.stats(), st = s.identity.status;
+  gM.setState(st); gPump.setState(st === 'running' ? 'flow' : st === 'waiting' ? 'waiting' : 'off');
+  gIn.setState(st === 'off' ? 'off' : sim.inBuffer.length ? 'running' : 'waiting');
+  gOut.setState(st === 'off' ? 'off' : sim.outBuffer.length >= sim.level.outCap ? 'stopped' : 'running');
+  const v = st === 'running' || st === 'waiting' ? sim.level.beltSpeed : 0;
+  [infeed, outfeed].forEach((c) => { c.tex.offset.x -= v * dt / 0.1; c.drums.forEach((d) => { d.rotation.y = 0; d.rotation.z -= v * dt / 0.06; }); if (c.motorShaft) c.motorShaft.rotation.x += v * dt * 60; });
+  ws.animate(dt, s, items.filter((i) => i.stage === 'machine' || i.stage === 'infeed' || i.stage === 'outfeed'));
+  return s;
+}
+function loop() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  tick(dt);
+  glow.update(dt, camera); outlines.update(dt); controls.update();
+  uiT -= dt; if (uiT <= 0) { uiT = 0.25; renderStrip(); renderSheet(); }
+  gfx.render(dt);
+  requestAnimationFrame(loop);
+}
+resize(); renderStrip(); loop();
+</script>
