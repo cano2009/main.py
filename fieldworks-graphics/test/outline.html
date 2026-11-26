@@ -1,0 +1,47 @@
+<!doctype html><meta charset="utf-8"><style>html,body{margin:0;background:#000;overflow:hidden}</style><body></body>
+<script type="importmap">{"imports":{"three":"./three.module.js","three/examples/jsm/":"./jsm/"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { createGraphics } from './graphics.js';
+import { createOutlines } from './outline.js';
+window.THREE = THREE;
+const load = (src) => new Promise((r) => { const s = document.createElement('script'); s.src = src; s.onload = r; document.head.appendChild(s); });
+await load('crops.js'); await load('station.js');
+const q = new URLSearchParams(location.search), mode = q.get('mode') || 'hover';
+const W = 1280, H = 820;
+const renderer = new THREE.WebGLRenderer(); renderer.setSize(W, H); document.body.appendChild(renderer.domElement);
+const scene = new THREE.Scene(); scene.background = new THREE.Color('#a9bfcc'); scene.fog = new THREE.Fog(new THREE.Color('#cdbf98'), 16, 60);
+scene.add(new THREE.HemisphereLight(new THREE.Color('#cfe0f0'), new THREE.Color('#5a4630'), 0.75));
+const sun = new THREE.DirectionalLight(new THREE.Color('#fff1d6'), 2.4); sun.position.set(4, 7, 3.5); sun.castShadow = true;
+Object.assign(sun.shadow.camera, { left: -7, right: 7, top: 7, bottom: -7, far: 30 }); sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.02; scene.add(sun);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80).rotateX(-Math.PI / 2), new THREE.MeshStandardMaterial({ color: new THREE.Color('#6f7f3e').convertSRGBToLinear(), roughness: 1 }));
+ground.position.y = -0.01; ground.receiveShadow = true; scene.add(ground);
+const slab = new THREE.Mesh(new THREE.BoxGeometry(9.2, 0.04, 7), new THREE.MeshStandardMaterial({ color: new THREE.Color('#8f8c86').convertSRGBToLinear(), roughness: 0.55 }));
+slab.position.set(0.15, 0, -1.3); slab.receiveShadow = true; scene.add(slab);
+const st = FWStation.build({}); scene.add(st.group);
+const L = FWCrops.leafTexture(), tex = new THREE.DataTexture(L.data, L.width, L.height); tex.generateMipmaps = true; tex.minFilter = THREE.LinearMipmapLinearFilter; tex.needsUpdate = true;
+const mk = (r) => { const m = new THREE.MeshStandardMaterial({ vertexColors: true, side: THREE.DoubleSide, roughness: r, map: tex }); m.color.setScalar(L.colorBoost); return m; };
+const pumpkins = [1.5, 2.25].map((x, i) => { const m = new THREE.Mesh(FWCrops.CROPS.pumpkin.produce({ seed: i + 1 }), mk(0.5)); const bb = m.geometry.boundingBox; m.position.set(x - (bb.min.x + bb.max.x) / 2, 0.8 - bb.min.y, 0); m.castShadow = true; scene.add(m); return m; });
+const camera = new THREE.PerspectiveCamera(40, W / H, 0.05, 200);
+camera.position.set(1.2, 2.6, 5.6); camera.lookAt(0, 0.9, -0.6);
+const gfx = createGraphics({ renderer, scene, camera, sun, storageKey: 'o' + Math.random() }); gfx.setPreset('high'); gfx.setGrade('farm', 0);
+const ol = createOutlines({ gfx, scene, camera });
+ol.register(st.group); pumpkins.forEach((p) => ol.register(p));
+// a ghost of a second washer line for placement
+const ghost = FWStation.build({}).group;
+const ghostMat = new THREE.MeshStandardMaterial({ color: new THREE.Color('#d8e6ee'), transparent: true, opacity: 0.35, roughness: 0.4, depthWrite: false });
+ghost.traverse((o) => { if (o.isMesh) { o.material = ghostMat; o.castShadow = false; } });
+ghost.scale.setScalar(0.999);
+if (mode === 'place') { ghost.position.set(0, 0, -2.6); scene.add(ghost); }
+if (mode === 'blocked') { ghost.position.set(0.6, 0, -0.9); scene.add(ghost); }
+// state
+scene.updateMatrixWorld(true); const picked = ol.pick({ reach: 8 });                 // aim at the screen centre
+window.picked = picked === st.group ? 'washer' : picked ? 'other' : 'none';
+if (mode === 'hover') ol.hover(picked);
+if (mode === 'select') { ol.select(st.group); ol.hover(pumpkins[0]); }
+if (mode === 'place') ol.placing(ghost, true);
+if (mode === 'blocked') ol.placing(ghost, false);
+let n = 0;
+function frame() { ol.update(1 / 20); gfx.render(1 / 60); if (++n < 12) requestAnimationFrame(frame); else window.done = true; }
+frame();
+</script>
