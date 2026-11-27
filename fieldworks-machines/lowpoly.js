@@ -5,13 +5,57 @@
 
 import * as THREE from 'three';
 import { mergeVertices, mergeBufferGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js';
+
+// ---------------------------------------------------------------------------
+// Polish: every plain box becomes a chamfered box (a narrow 45° bevel on each edge and a small facet on each corner),
+// keeping its exact size, rotation and position. Faces stay crisp; the bevels catch the light the way the reference
+// models do. Runs inside bake() and stylize(), so every model built from boxes gets it.
+export const POLISH = { chamfer: true };
+const V3 = THREE.Vector3;
+function chamferGeo(w, h, d) {
+  const c = Math.min(0.045, Math.min(w, h, d) * 0.2, Math.max(w, h, d) * 0.08);
+  if (c < 0.004) return null;
+  const pts = [];
+  for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
+    const x = sx * w / 2, y = sy * h / 2, z = sz * d / 2;
+    pts.push(new V3(x - sx * c, y, z), new V3(x, y - sy * c, z), new V3(x, y, z - sz * c));
+  }
+  return new ConvexGeometry(pts);
+}
+// the affine transform that was baked into a BoxGeometry after it was made (translate, rotate, lookAt...)
+function boxMatrix(g) {
+  const P = g.parameters, w = P.width, h = P.height, d = P.depth, p = g.attributes.position;
+  const ref = new THREE.BoxGeometry(w, h, d, P.widthSegments, P.heightSegments, P.depthSegments).attributes.position;
+  if (ref.count !== p.count) return null;
+  const find = (sx, sy, sz) => { for (let i = 0; i < ref.count; i++) if (Math.abs(ref.getX(i) - sx * w / 2) < 1e-6 && Math.abs(ref.getY(i) - sy * h / 2) < 1e-6 && Math.abs(ref.getZ(i) - sz * d / 2) < 1e-6) return i; return -1; };
+  const i0 = find(-1, -1, -1), ix = find(1, -1, -1), iy = find(-1, 1, -1), iz = find(-1, -1, 1), i1 = find(1, 1, 1);
+  if ([i0, ix, iy, iz, i1].some((i) => i < 0)) return null;
+  const at = (i) => new V3(p.getX(i), p.getY(i), p.getZ(i)), o = at(i0);
+  const ex = at(ix).sub(o).divideScalar(w), ey = at(iy).sub(o).divideScalar(h), ez = at(iz).sub(o).divideScalar(d);
+  const M = new THREE.Matrix4().makeBasis(ex, ey, ez);
+  M.setPosition(o.clone().sub(new V3(-w / 2, -h / 2, -d / 2).applyMatrix4(M)));
+  if (new V3(w / 2, h / 2, d / 2).applyMatrix4(M).distanceTo(at(i1)) > 1e-4) return null;
+  return M;
+}
+export function polish(root) {
+  if (!POLISH.chamfer) return root;
+  root.traverse((o) => {
+    if (!o.isMesh || o.isInstancedMesh || o.userData.polished || o.userData.noChamfer) return;
+    const g = o.geometry; if (!g || g.type !== 'BoxGeometry' || Array.isArray(o.material) || (o.material && (o.material.map || o.material.emissiveMap))) return;
+    const M = boxMatrix(g); if (!M) return;
+    const P = g.parameters, ng = chamferGeo(P.width, P.height, P.depth); if (!ng) return;
+    ng.applyMatrix4(M); o.geometry = ng; o.userData.polished = true;
+  });
+  return root;
+}
 
 const matCache = new Map();
 function stylMat(m, o) {
   if (!m || !m.isMeshStandardMaterial || m.userData.lowpoly) return m;
   if (matCache.has(m)) return matCache.get(m);
   const n = m.clone();
-  n.flatShading = !m.userData.smooth;
+  n.flatShading = false;   // geometry carries the facets (chamfered boxes are flat-faced, cylinders round)
   const keep = (t) => (t && t.isCanvasTexture ? t : null);
   n.map = keep(m.map); n.emissiveMap = keep(m.emissiveMap) || m.emissiveMap;
   n.normalMap = null; n.roughnessMap = null; n.metalnessMap = null; n.aoMap = null;
@@ -34,7 +78,7 @@ function hullGeometry(g) {
   hullCache.set(g, h); return h;
 }
 // The reference look is clean faceted shapes without ink lines; set STYLE.outline = true for the toon style.
-export const STYLE = { outline: true };   // bold ink outlines (the master prompt's vending-machine look)
+export const STYLE = { outline: false };   // ink hulls off: the references are clean shapes lit softly, not inked
 const outlineMats = new Map();
 function outlineMaterial(th, color) {
   const k = th.toFixed(4) + color;
@@ -61,6 +105,7 @@ function outlineMaterial(th, color) {
  * Converts materials in place and adds outlines as child meshes (userData.outline = true).
  */
 export function stylize(root, o) {
+  polish(root);
   o = Object.assign({ outline: STYLE.outline, outlineColor: '#15171a', minSize: 0.07, thickness: 0.022 }, o || {});
   const add = [];
   root.updateMatrixWorld(true);
@@ -91,6 +136,7 @@ export function stylize(root, o) {
  */
 export const BAKE = { enabled: true };   // the validator turns this off so every part stays a separate mesh
 export function bake(root, keep) {
+  polish(root);
   if (!BAKE.enabled) return root;
   const skip = new Set(keep || []);
   root.updateMatrixWorld(true);
@@ -173,18 +219,19 @@ export function terrain(o) {
   const p = geo.attributes.position;
   const heightAt = (x, z) => terrainHeight(x, z, flatR);
   for (let i = 0; i < p.count; i++) p.setY(i, heightAt(p.getX(i), p.getZ(i)));
-  geo = geo.toNonIndexed(); geo.computeVertexNormals();
+  geo.computeVertexNormals();
+  // soft, large patches of colour (no per-triangle noise) and dirt paths that blend in at their edges
   const pos = geo.attributes.position, cols = new Float32Array(pos.count * 3);
-  const g1 = lin('#7fb54a'), g2 = lin('#6aa63f'), g3 = lin('#8fc256'), dirt = lin('#a98a62');
-  for (let f = 0; f < pos.count / 3; f++) {
-    let cx = 0, cz = 0; for (let j = 0; j < 3; j++) { cx += pos.getX(f * 3 + j) / 3; cz += pos.getZ(f * 3 + j) / 3; }
-    const h = Math.sin(cx * 12.9898 + cz * 78.233) * 43758.5453, rr = h - Math.floor(h);
-    let c = rr < 0.33 ? g1 : rr < 0.66 ? g2 : g3;
-    if (o.paths && o.paths.some((pt) => Math.abs(cz - pt(cx)) < 1.2 && Math.abs(cx) < 60)) c = dirt;
-    for (let j = 0; j < 3; j++) cols.set([c.r, c.g, c.b], (f * 3 + j) * 3);
+  const gA = lin('#8cc152'), gB = lin('#7bb446'), gC = lin('#9ccb5e'), dirt = lin('#b8996c'), c = new THREE.Color();
+  for (let i = 0; i < pos.count; i++) {
+    const x = pos.getX(i), z = pos.getZ(i);
+    const n = 0.5 + 0.25 * Math.sin(x * 0.07 + 1.3) * Math.cos(z * 0.06) + 0.25 * Math.sin((x - z) * 0.035 + 0.5);
+    c.copy(gB).lerp(n > 0.5 ? gC : gA, Math.abs(n - 0.5) * 1.6);
+    if (o.paths) o.paths.forEach((pt) => { const dz = Math.abs(z - pt(x)); if (Math.abs(x) < 60 && dz < 2.2) c.lerp(dirt, Math.min(1, (2.2 - dz) / 0.9)); });
+    cols.set([c.r, c.g, c.b], i * 3);
   }
   geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
-  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1 }));
+  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: false, roughness: 1 }));
   m.receiveShadow = true; m.material.userData.lowpoly = true; m.userData.heightAt = heightAt;
   return m;
 }

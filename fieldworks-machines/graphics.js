@@ -26,7 +26,7 @@ export const PRESETS = {
     textureQuality: 'low', effects: 'low', adaptive: true
   },
   medium: {
-    renderScale: 1, maxPixelRatio: 1, antialias: 'smaa', ao: false, aoStrength: 0, bloom: true, bloomStrength: 0.45,
+    renderScale: 1, maxPixelRatio: 1, antialias: 'smaa', ao: true, aoStrength: 0.75, bloom: true, bloomStrength: 0.35,
     shadows: 'medium', reflections: 'low', envStrength: 0.15, grade: true, vignette: 0.15, viewDistance: 0.8, foliageDensity: 0.7,
     textureQuality: 'medium', effects: 'medium', adaptive: true
   },
@@ -61,7 +61,7 @@ const ANISO = { low: 1, medium: 4, high: 8, ultra: 16 };
 // temp: + warm / - cool; tint: + magenta / - green; lift and gain are per-channel shadow and highlight colour.
 export const GRADES = {
   neutral:   { exposure: 1.0, contrast: 1.0, saturation: 1.0, temp: 0, tint: 0, lift: [0, 0, 0], gain: [1, 1, 1] },
-  farm:      { exposure: 1.05, contrast: 1.04, saturation: 1.08, temp: 0.06, tint: -0.01, lift: [0.01, 0.008, 0], gain: [1.02, 1.0, 0.96] },
+  farm:      { exposure: 0.97, contrast: 1.14, saturation: 1.2, temp: 0.05, tint: -0.01, lift: [0, 0, 0.004], gain: [1.02, 1.0, 0.96] },
   workshop:  { exposure: 1.0, contrast: 1.08, saturation: 1.02, temp: 0.1, tint: 0, lift: [0.012, 0.006, 0], gain: [1.03, 0.99, 0.93] },
   factory:   { exposure: 1.02, contrast: 1.1, saturation: 0.96, temp: -0.06, tint: 0, lift: [0, 0.004, 0.012], gain: [0.97, 1.0, 1.04] },
   greenhouse:{ exposure: 1.06, contrast: 1.03, saturation: 1.1, temp: -0.01, tint: -0.03, lift: [0, 0.01, 0.004], gain: [0.98, 1.03, 0.98] },

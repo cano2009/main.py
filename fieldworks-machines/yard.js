@@ -14,7 +14,7 @@ const mats = new Map();
 export function flat(hex, o) {
   const k = hex + JSON.stringify(o || {});
   if (mats.has(k)) return mats.get(k);
-  const m = new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.7, metalness: 0.05, flatShading: true }, o || {}));
+  const m = new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.7, metalness: 0.05, flatShading: false }, o || {}));
   m.color = lin(hex); m.userData.lowpoly = true; mats.set(k, m);
   return m;
 }
@@ -30,7 +30,7 @@ export const C = {
   hay: flat('#e2b950', { roughness: 0.95 }), hayEnd: flat('#c99a35', { roughness: 0.95 }), pumpkin: flat('#ee7d1c', { roughness: 0.6 }), stem: flat('#5d7a2a'),
   tire: flat('#232427', { roughness: 0.9 }), rim: flat('#c9ccd0', { roughness: 0.35, metalness: 0.6 }),
   glass: Object.assign(new THREE.MeshStandardMaterial({ color: lin('#bfe3f2'), roughness: 0.05, metalness: 0.1, transparent: true, opacity: 0.35, depthWrite: false }), { userData: { lowpoly: true } }),
-  water: Object.assign(new THREE.MeshStandardMaterial({ color: lin('#3fb6e8'), roughness: 0.1, transparent: true, opacity: 0.75, flatShading: true }), { userData: { lowpoly: true } }),
+  water: Object.assign(new THREE.MeshStandardMaterial({ color: lin('#3fb6e8'), roughness: 0.1, transparent: true, opacity: 0.75, flatShading: false }), { userData: { lowpoly: true } }),
   lamp: Object.assign(new THREE.MeshStandardMaterial({ color: lin('#222'), emissive: lin('#ffd9a0'), emissiveIntensity: 0 }), { userData: { lowpoly: true } })
 };
 
@@ -742,7 +742,7 @@ export function cropField(F, scene) {
   leaves.push(new THREE.ConeGeometry(0.06, 0.3, 4).translate(0, 0.15, 0));
   const geo = mergeBufferGeometries(leaves.map((g) => g.toNonIndexed()), false); geo.computeVertexNormals();
   const per = Math.floor(W / 0.36), n = per * rows;
-  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.75, flatShading: true }); mat.userData.lowpoly = true;
+  const mat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.75, flatShading: false }); mat.userData.lowpoly = true;
   const mesh = new THREE.InstancedMesh(geo, mat, n); mesh.castShadow = true; mesh.receiveShadow = true;
   const plants = []; const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new V();
   let s = 11; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;

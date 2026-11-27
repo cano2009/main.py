@@ -12,7 +12,7 @@ const lin = (h) => new THREE.Color(h).convertSRGBToLinear();
 const mats = new Map();
 function mat(hex, o) {
   const k = hex + JSON.stringify(o || {});
-  if (!mats.has(k)) { const m = new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.78, metalness: 0, flatShading: true }, o || {})); m.color = lin(hex); m.userData.lowpoly = true; mats.set(k, m); }
+  if (!mats.has(k)) { const m = new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.78, metalness: 0, flatShading: false }, o || {})); m.color = lin(hex); m.userData.lowpoly = true; mats.set(k, m); }
   return mats.get(k);
 }
 export const L = {
@@ -52,7 +52,7 @@ function beltTexture() {
 export function conveyor(x0, x1) {
   const root = new THREE.Group(), len = x0 - x1, cx = (x0 + x1) / 2, W = 0.74;
   const tex = beltTexture().clone(); tex.needsUpdate = true; tex.repeat.set(len / 0.45, 1);
-  const bm = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, flatShading: true }); bm.userData.lowpoly = true;
+  const bm = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, flatShading: false }); bm.userData.lowpoly = true;
   const belt = box(len, 0.04, W, bm, cx, BELT_Y - 0.02, 0, root);
   [-1, 1].forEach((s) => {
     const z = s * (W / 2 + 0.05);
@@ -262,7 +262,7 @@ export function incline(run, rise) {
   const len = Math.hypot(run, rise), ang = Math.atan2(rise, run), W = 0.6;
   const deck = new THREE.Group(); deck.position.set(run / 2, BELT_Y + rise / 2, 0); deck.rotation.z = ang; root.add(deck);
   const tex = beltTexture().clone(); tex.needsUpdate = true; tex.repeat.set(len / 0.45, 1);
-  const bm = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, flatShading: true }); bm.userData.lowpoly = true;
+  const bm = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, flatShading: false }); bm.userData.lowpoly = true;
   const belt = box(len, 0.04, W, bm, 0, -0.02, 0, deck);
   [-1, 1].forEach((s) => { box(len + 0.08, 0.18, 0.07, L.green, 0, -0.06, s * (W / 2 + 0.05), deck); box(len + 0.08, 0.035, 0.11, L.yellow, 0, 0.045, s * (W / 2 + 0.05), deck); });
   [-len / 2, len / 2].forEach((x) => cylZ(0.07, W + 0.06, 10, L.steel, x, -0.06, 0, deck));

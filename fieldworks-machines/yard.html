@@ -751,7 +751,7 @@ function addProp(kind, x, y, z, o) {
   else if (kind === 'barrel') { mesh = Y.barrel(o.color); body = new CANNON.Body({ mass: 60, shape: new CANNON.Cylinder(0.29, 0.29, 0.88, 10) }); }
   else if (kind === 'pumpkin') { mesh = Y.pumpkin(o.seed); body = new CANNON.Body({ mass: 7, shape: new CANNON.Sphere(0.24) }); body.angularDamping = 0.4; }
   else { mesh = Y.hayBale(); body = new CANNON.Body({ mass: 240 }); const q = new CANNON.Quaternion(); q.setFromEuler(0, 0, Math.PI / 2); body.addShape(new CANNON.Cylinder(0.6, 0.6, 1.1, 12), new CANNON.Vec3(), q); }
-  stylize(mesh); scene.add(mesh); mesh.traverse((o) => { if (o.isMesh && o.material.isMeshStandardMaterial && envMats) { envMats.add(o.material); o.material.envMapIntensity = 0.08 + 0.92 * Math.max(0, lastDay); } });
+  stylize(mesh); scene.add(mesh); mesh.traverse((o) => { if (o.isMesh && o.material.isMeshStandardMaterial && envMats) { envMats.add(o.material); o.material.envMapIntensity = 0.05 + 0.33 * Math.max(0, lastDay); } });
   body.position.set(x, y, z); if (o.ry) body.quaternion.setFromEuler(o.rx || 0, o.ry, o.rz || 0);
   body.linearDamping = 0.05; body.angularDamping = Math.max(body.angularDamping, 0.12);
   body.allowSleep = true; body.sleepSpeedLimit = 0.18; body.sleepTimeLimit = 0.7;
@@ -1295,7 +1295,7 @@ function dimReflections(day) {
   // the reflection environment is a fixed bright room, so scale it with daylight or nights glow
   if (!envMats) { envMats = new Set(); scene.traverse((o) => { if (o.isMesh && o.material && o.material.isMeshStandardMaterial) envMats.add(o.material); }); }
   if (Math.abs(day - lastDay) < 0.02) return; lastDay = day;
-  envMats.forEach((m) => { m.envMapIntensity = 0.08 + 0.92 * day; });
+  envMats.forEach((m) => { m.envMapIntensity = 0.05 + 0.33 * day; });   // a hint of reflection, not a grey studio wash
 }
 const NIGHT_GRADE = { exposure: 0.78, contrast: 1.08, saturation: 0.62, temp: -0.14, tint: 0, lift: [0, 0.004, 0.016], gain: [0.88, 0.96, 1.1] };
 let gradeMode = 'farm';
@@ -1310,9 +1310,9 @@ function applyLighting() {
   const up = e > -0.02;
   const dir = up ? env.sunDir : new V(-env.sunDir.x, -env.sunDir.y, -env.sunDir.z * 0.5).normalize();
   sun.position.copy(sun.target.position).addScaledVector(dir, 90);
-  sun.intensity = up ? 2.1 * THREE.MathUtils.smoothstep(e, -0.02, 0.18) * (1 - wf * 0.75) : 0.22;
+  sun.intensity = up ? 2.5 * THREE.MathUtils.smoothstep(e, -0.02, 0.18) * (1 - wf * 0.75) : 0.22;
   sun.color.setRGB(1, up ? 0.92 - sunset * 0.35 : 0.8, up ? 0.8 - sunset * 0.45 : 1).multiplyScalar(up ? 1 : 0.6);
-  hemi.intensity = 0.12 + 0.85 * day; dimReflections(day);
+  hemi.intensity = 0.12 + 0.7 * day; dimReflections(day);
   const mode = e < -0.04 ? 'night' : e < 0.12 ? 'dusk' : 'farm';
   if (mode !== gradeMode) { gradeMode = mode; gfx.setGrade(mode === 'night' ? NIGHT_GRADE : GRADES[mode], 2.5); } hemi.color.copy(tmpC2).lerp(new THREE.Color(1, 1, 1), 0.4);
   const lit = grid.powered.lights && env.dark;

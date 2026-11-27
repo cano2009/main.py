@@ -16,7 +16,7 @@ export const CELL = 1.2;
 const V = THREE.Vector3;
 const lin = (h) => new THREE.Color(h).convertSRGBToLinear();
 const mats = new Map();
-function mat(hex, o) { const k = hex + JSON.stringify(o || {}); if (!mats.has(k)) { const m = new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.7, metalness: 0.05, flatShading: true }, o || {})); m.color = lin(hex); m.userData.lowpoly = true; mats.set(k, m); } return mats.get(k); }
+function mat(hex, o) { const k = hex + JSON.stringify(o || {}); if (!mats.has(k)) { const m = new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.7, metalness: 0.05, flatShading: false }, o || {})); m.color = lin(hex); m.userData.lowpoly = true; mats.set(k, m); } return mats.get(k); }
 const M = {
   green: mat('#3f7d4c'), greenD: mat('#2f5a3b'), yellow: mat('#e9b830'), yellowD: mat('#c99a22'), cream: mat('#e6e0cf'), steel: mat('#a3a9ad', { metalness: 0.3, roughness: 0.5 }),
   steelD: mat('#6f767b', { metalness: 0.3, roughness: 0.55 }), dark: mat('#33363a'), black: mat('#1b1c1e'), red: mat('#c94232'), blue: mat('#2c4f7c', { roughness: 0.4, metalness: 0.3 }),

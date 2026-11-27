@@ -33,7 +33,7 @@ export function attachPorts(model, list, name) {
   return model;
 }
 const mats = {};
-function m(hex) { if (!mats[hex]) { mats[hex] = new THREE.MeshStandardMaterial({ color: new THREE.Color(hex).convertSRGBToLinear(), roughness: 0.6, metalness: 0.2, flatShading: true }); mats[hex].userData.lowpoly = true; } return mats[hex]; }
+function m(hex) { if (!mats[hex]) { mats[hex] = new THREE.MeshStandardMaterial({ color: new THREE.Color(hex).convertSRGBToLinear(), roughness: 0.6, metalness: 0.2, flatShading: false }); mats[hex].userData.lowpoly = true; } return mats[hex]; }
 function socket(parent, p) {
   const g = new THREE.Group(); g.position.copy(p.pos); g.quaternion.setFromUnitVectors(new V(0, 1, 0), p.dir); parent.add(g);
   const add = (geo, hex, y) => { const mesh = new THREE.Mesh(geo, m(hex)); mesh.position.y = y; mesh.castShadow = true; mesh.userData.socketPart = true; g.add(mesh); return mesh; };
