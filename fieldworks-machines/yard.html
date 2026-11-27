@@ -175,6 +175,7 @@ import { Generator, GEN_DEF, buildGenerator } from './generator.js';
 import { WindTurbine, SolarArray, StorageTank, PumpJack, SprayDrone, PowerGrid, FieldSim, LineSim, LINE_DEF, CROPS, TractorSim, ChainSim, ZONES, gradeOf } from './sims.js';
 import { DigesterSim, StewardSim, LogicController } from './industry.js';
 import * as IV from './invent.js';
+import * as DS from './designer.js';
 import * as LN from './line.js';
 import * as LP from './lpcrops.js';
 import * as HD from './hdcrops.js';
@@ -340,12 +341,13 @@ const pak = LN.packer(); lineG.add(pak.root);
 { const Z = LINE_DEF.zones; wsh.root.position.x = LX0 - Z.wash; cut.root.position.x = LX0 - Z.cut; pak.root.position.x = LX0 - Z.pack - 0.1; }
 const pal = LN.pallet(); pal.root.position.x = -1.75; lineG.add(pal.root);
 const hbin = LN.bin(); hbin.root.position.x = LX0 + 0.75; lineG.add(hbin.root);
-const washT = LN.washTable(); washT.root.position.set(-0.75, 0, LZ - 1.6); washT.root.rotation.y = Math.PI; scene.add(washT.root);
+const washT = LN.washTable(); washT.root.position.set(-3.4, 0, LZ - 1.3); washT.root.rotation.y = Math.PI; scene.add(washT.root);
 
 // ---------- tractor and implements (parked in slots west of the field gate, hitch facing +x) ----------
 const trac = FM.tractor(); scene.add(trac.root);
 const IMPL = { plow: FM.plow(), seeder: FM.seeder(), harvester: FM.harvester(), trailer: FM.trailer() };
-const SLOT_X = 7.4, SLOTS = { plow: { x: SLOT_X, z: 5.4 }, seeder: { x: SLOT_X, z: 7.4 }, harvester: { x: SLOT_X, z: 9.4 }, trailer: { x: SLOT_X, z: 11.4 } };
+// the long trailer parks farthest from the processing line, the short plow nearest, so the line keeps clear space around it
+const SLOT_X = 7.4, SLOTS = { trailer: { x: SLOT_X, z: 4.1 }, harvester: { x: SLOT_X, z: 6.1 }, seeder: { x: SLOT_X, z: 8.1 }, plow: { x: SLOT_X, z: 10.1 } };
 Object.entries(IMPL).forEach(([k, m]) => { m.name = k; const bb = new THREE.Box3().setFromObject(m.root); m.parkY = -bb.min.y; m.root.rotation.y = Math.PI / 2; m.root.position.set(SLOTS[k].x, m.parkY, SLOTS[k].z); scene.add(m.root); });
 
 // ---------- food production chain: sorter -> cross conveyor -> mill -> oven -> bagger -> pallet ----------
@@ -399,14 +401,16 @@ const pT = pole(-15, -9.5, [-5.5, -5], 'Pole T'), pA = pole(-5.5, -5, [5, -3.5],
 const pE = pole(4.5, 9.6, [5, -3.5], 'Pole E');
 const pF = pole(8.2, 16.4, [4.5, 9.6], 'Pole F');
 // ---------- recovery digester, soil steward with its rover, logic controller ----------
-const DIG_POS = new V(1.6, 0, 10.1), TOTE = new V(LX0 - 8.6 - 0.12, 0.34, LZ - 1.35);
+const DIG_POS = new V(0.7, 0, 8.7), TOTE = new V(LX0 - 8.6 - 0.12, 0.34, LZ - 1.35);
 const dgm = IV.digester(TOTE.clone().sub(DIG_POS)); dgm.root.position.copy(DIG_POS); scene.add(dgm.root);
 const STW_POS = new V(33.2, 0, 10.0);
 const stw = IV.steward(); stw.root.position.copy(STW_POS); scene.add(stw.root);
 const rov = IV.rover(); scene.add(rov.root);
-const LC_POS = new V(0.4, 0, 16.0);
+const LC_POS = new V(-0.7, 0, 16.6);
 const lc = IV.controller(); lc.root.position.copy(LC_POS); scene.add(lc.root);
-[dgm.root, stw.root, rov.root, lc.root].forEach((r) => stylize(r));
+const WS_POS = new V(14.2, 0, 22.6), WS_ROT = Math.PI;   // workshop bay south of the bakery chain, open side facing the yard
+const bay = DS.workshopBay(); bay.root.position.copy(WS_POS); bay.root.rotation.y = WS_ROT; scene.add(bay.root);
+[dgm.root, stw.root, rov.root, lc.root, bay.root].forEach((r) => stylize(r));
 const pG = pole(33.6, 4.6, [24.5, -4.2], 'Pole G');   // feeds the soil steward   // feeds the food chain   // feeds the processing line and the yard lights on that side
 
 // ---------- connection points: every cable, wire and pipe below runs from one port to another ----------
@@ -448,6 +452,7 @@ reg(pal2, [PO('in', 'conveyor', 'in', [-0.55, 0.2, 0], [chu2.dirOut.x, -chu2.dir
 reg(dgm, [PO('in', 'conveyor', 'in', TOTE.clone().sub(DIG_POS).toArray(), AUG_DIR.clone().negate().toArray(), { socket: false, label: 'Auger foot' }), PO('power', 'power', 'out', [1.405, 0.26, -0.5], [1, 0, 0], { capacity: 5, label: 'Biogas engine output' }),
   PO('digestate', 'slurry', 'out', [-0.1, 0.36, -0.885], [0, 0, -1], { capacity: 12, label: 'Digestate outlet' }), PO('signal', 'signal', 'in', [0.6, 0.3, -0.81], [0, 0, -1], { label: 'Engine signal input' })], 'Bio-recovery digester');
 reg(stw, [PO('power', 'power', 'in', [-0.75, 0.4, -0.8], [0, 0, -1], { capacity: 2, label: 'Station supply' }), PO('signal', 'signal', 'in', [-0.35, 0.4, -0.8], [0, 0, -1], { label: 'Station signal input' }), PO('digestate', 'slurry', 'in', [1.18, 0.5, 0.55], [1, 0, 0], { label: 'Digestate inlet' })], 'Soil steward');
+reg(bay, [PO('supply', 'power', 'in', [-2.5, 0.6, 1.41], [0, 0, 1], { capacity: 10, label: 'Workshop supply' }), PO('machine', 'power', 'out', [-2.379, 0.9, 1.3], [1, 0, 0], { optional: true, label: 'Machine outlet' })], 'Workshop bay');
 const SIG_OUT = ['line', 'chain', 'digester', 'steward', 'panel'];
 reg(lc, [PO('power', 'power', 'in', [0.33, 0.5, -0.21], [0, 0, -1], { capacity: 0.2, label: 'Controller supply' }), ...SIG_OUT.map((id, i) => PO('sig_' + id, 'signal', 'out', [-0.32 + i * 0.13, 0.5, -0.21], [0, 0, -1], { label: 'Signal output ' + (i + 1) }))], 'Logic controller');
 const chu = LN.chute(-0.85, 0.72, -1.22, 0.2); lineG.add(chu.root); stylize(chu.root);
@@ -457,8 +462,10 @@ reg(pak, [PO('in', 'conveyor', 'in', [0.59, LN.BELT_Y - 0.02, 0], [1, 0, 0], { s
 reg(chu, [PO('in', 'conveyor', 'in', [-0.85, 0.72, 0], [1, 0, 0], { socket: false, label: 'Chute top' }), PO('out', 'conveyor', 'out', [-1.22, 0.2, 0], chu.dirOut.toArray(), { socket: false, label: 'Chute bottom' })], 'Roller chute');
 reg(pal, [PO('in', 'conveyor', 'in', [0.53, 0.2, 0], chu.dirOut.clone().negate().toArray(), { socket: false, label: 'Pallet drop zone' })], 'Pallet');
 const net = PT.createNetwork(), find = PT.find;
-const cable = (a, b, h) => net.link(a, b, 'cable', (pa, pb, da, db) => PT.tubePath(PT.groundRoute(pa, pb, da, db, h), 0.03, Y.C.black, wireG));
-const pipe = (a, b, r, mat, h) => net.link(a, b, 'pipe', (pa, pb, da, db) => PT.tubePath(PT.groundRoute(pa, pb, da, db, h === undefined ? (r || 0.06) + 0.01 : h), r || 0.06, mat || Y.C.steel, pipeG));
+// buried runs draw only the risers where they enter and leave the ground: the run itself is out of sight in a duct
+const lay = (pa, pb, da, db, h, r, mat, parent) => { const pts = PT.groundRoute(pa, pb, da, db, h); if (!(h < 0) || pts.length < 6) return PT.tubePath(pts, r, mat, parent); const g = new THREE.Group(); parent.add(g); PT.tubePath(pts.slice(0, 3), r, mat, g); PT.tubePath(pts.slice(-3), r, mat, g); return g; };
+const cable = (a, b, h) => net.link(a, b, 'cable', (pa, pb, da, db) => lay(pa, pb, da, db, h, 0.03, Y.C.black, wireG));
+const pipe = (a, b, r, mat, h) => net.link(a, b, 'pipe', (pa, pb, da, db) => lay(pa, pb, da, db, h === undefined ? (r || 0.06) + 0.01 : h, r || 0.06, mat || Y.C.steel, pipeG));
 const span = (a, b, sag, r, mat) => a.forEach((p, i) => net.link(p, b[i], 'wire', (pa, pb) => Y.tube(Y.catenary(pa, pb, sag), r || 0.022, mat || Y.C.black, wireG, { seg: 16, radial: 4, noOutline: true })));
 const WP = (m) => m.ports.filter((p) => p.type === "wire");
 // overhead network
@@ -473,10 +480,11 @@ cable(find(dp, 'battery'), find(bess, 'dc')); cable(find(dp, 'generator'), find(
 cable(find(dp, 'line'), find(pE, 'base'));
 [[0, pB], [1, pC], [2, pS], [3, pA]].forEach(([i, p]) => cable(find(p, 'base'), find(lamps[i], 'power')));
 // new branch: pole D to pole G, then the steward; digester feeds pole E; controller from pole F
+cable(find(pF, 'base'), find(bay, 'supply'), -0.25);   // buried feed to the workshop
 span(WP(pD), WP(pG), 0.6); cable(find(pG, 'drop'), find(stw, 'power')); cable(find(pE, 'base'), find(dgm, 'power')); cable(find(pF, 'base'), find(lc, 'power'));
 // automation signal cables from the controller (long runs buried in a duct)
 const SIGM = Y.flat('#7d4fc4', { roughness: 0.5 });
-const sig = (a, b, h) => net.link(a, b, 'cable', (pa, pb, da, db) => PT.tubePath(PT.groundRoute(pa, pb, da, db, h), 0.022, SIGM, wireG));
+const sig = (a, b, h) => net.link(a, b, 'cable', (pa, pb, da, db) => lay(pa, pb, da, db, h, 0.022, SIGM, wireG));
 sig(find(lc, 'sig_line'), find(cut, 'signal'), -0.2); sig(find(lc, 'sig_chain'), find(mil, 'signal')); sig(find(lc, 'sig_digester'), find(dgm, 'signal'), -0.2);
 sig(find(lc, 'sig_steward'), find(stw, 'signal'), -0.25); sig(find(lc, 'sig_panel'), find(dp, 'signal'), -0.25);
 // water
@@ -492,8 +500,10 @@ net.link(find(cut, 'grain'), find(cross, 'in'), 'direct'); net.link(find(cross, 
 net.link(find(beltM, 'out'), find(beltB, 'in'), 'direct'); net.link(find(beltB, 'out'), find(bag, 'in'), 'direct'); net.link(find(bag, 'out'), find(chu2, 'in'), 'direct'); net.link(find(chu2, 'out'), find(pal2, 'in'), 'direct');
 // hitch: implements couple to the tractor through their hitch ports, and only when the two line up
 let hitchLink = null;
+// hitching happens between frames, so bring the tractor model to its simulated pose first
+function syncTrac() { trac.root.position.set(tractorSim.pos.x, 0, tractorSim.pos.z); trac.root.rotation.y = tractorSim.heading; trac.root.updateMatrixWorld(true); }
 function attachImpl(name) {
-  const m = IMPL[name]; trac.root.updateMatrixWorld(true);
+  const m = IMPL[name]; syncTrac();
   if (m.towed) {   // towed machines stay in the world and swing behind the hitch on their drawbar
     const H = trac.hitch.pos.clone().applyMatrix4(trac.root.matrixWorld); m.root.position.copy(H); m.root.rotation.set(0, trac.root.rotation.y, 0);
     m.axle = new V(H.x - Math.sin(trac.root.rotation.y) * m.axleBack, 0, H.z - Math.cos(trac.root.rotation.y) * m.axleBack);
@@ -504,9 +514,40 @@ function attachImpl(name) {
 }
 function detachImpl(name) {
   const m = IMPL[name]; if (!m) return; if (hitchLink) { net.unlink(hitchLink); hitchLink = null; }
-  scene.attach(m.root); m.root.position.y = m.parkY; m.root.rotation.x = 0; m.root.rotation.z = 0; m.axle = null;
+  syncTrac(); if (m.towed) { const H = trac.hitch.pos.clone().applyMatrix4(trac.root.matrixWorld); m.root.position.set(H.x, m.root.position.y, H.z); }
+  scene.attach(m.root); m.root.position.y = m.parkY; m.root.rotation.x = 0; m.root.rotation.z = 0; m.axle = null; m.lastH = null;
+  // settle square in its slot when it was backed in close to it (the last few centimetres of a careful park)
+  const sl = SLOTS[name], da = Math.abs(((m.root.rotation.y - Math.PI / 2 + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
+  if (sl && Math.hypot(m.root.position.x - sl.x, m.root.position.z - sl.z) < 0.8 && da < 0.5) { m.root.position.x = sl.x; m.root.position.z = sl.z; m.root.rotation.y = Math.PI / 2; }
 }
 scene.add(mergeByMaterial(wireG)); { const pm = mergeByMaterial(pipeG); stylize(pm); scene.add(pm); }
+// ---------- workshop: the built machine (solid, wired to the pedestal) and the draft (blueprint) ----------
+const wsG = new THREE.Group(); wsG.position.copy(WS_POS); wsG.rotation.y = WS_ROT; scene.add(wsG);
+const wsCableG = new THREE.Group(); scene.add(wsCableG);
+let wsBuilt = null, wsDraft = null, wsLink = null;
+function wsModel(design, blueprint) {
+  const m = DS.build3D(design); stylize(m.root); wsG.add(m.root);
+  if (blueprint) DS.setBlueprint(m, true);
+  return m;
+}
+function wsDrop(m) { if (!m) return; wsG.remove(m.root); KEY_OF.delete(m.root); const i = MODELS.indexOf(m); if (i >= 0) MODELS.splice(i, 1); }
+function wsRebuildBuilt() {
+  if (wsLink) { net.unlink(wsLink); wsLink = null; } wsCableG.clear();
+  wsDrop(wsBuilt); wsBuilt = null;
+  if (!custom.built) return;
+  wsBuilt = wsModel(custom.built, false);
+  const ports = wsBuilt.terminal ? [PO('power', 'power', 'in', wsBuilt.terminal.toArray(), [0, 1, 0], { capacity: 8, label: 'Motor terminal' })] : [];
+  reg(wsBuilt, ports, custom.built.name);
+  if (wsBuilt.terminal) wsLink = net.link(find(bay, 'machine'), find(wsBuilt, 'power'), 'cable', (pa, pb, da, db) => PT.tubePath([pa, pa.clone().addScaledVector(da, 0.15), new V(pa.x + da.x * 0.15, pb.y + 0.25, pb.z), pb.clone().add(new V(0, 0.25, 0)), pb], 0.025, Y.C.black, wsCableG));
+  KEY_OF.set(wsBuilt.root, 'workshop'); outlines.register(wsBuilt.root);
+}
+function wsRefreshDraft() {
+  wsDrop(wsDraft); wsDraft = null;
+  const same = custom.built && JSON.stringify(DS.cleanDesign(custom.draft)) === JSON.stringify(custom.built);
+  if (!same) { wsDraft = wsModel(custom.draft, true); KEY_OF.set(wsDraft.root, 'workshop'); }
+  if (wsBuilt) wsBuilt.root.visible = same;
+  wsCableG.visible = !!wsBuilt && same;
+}
 
 // ---------- glowing state lights (after stylize) ----------
 const gW = glow.attach(tw.root, { state: 'running' }); gW.led({ position: new V(1.45, 1.5, 1.3), size: 0.04 });
@@ -525,9 +566,9 @@ gG.strip({ from: new V(0.3, 1.38, 0.583), to: new V(0.8, 1.38, 0.583), width: 0.
 const fx = Y.sprayFX(scene);
 
 // selectable roots
-const KEY_OF = new Map([[tw.root, 'wind'], [sa.root, 'solar'], [tk.root, 'tank'], [pj.root, 'pump'], [dr.root, 'drone'], [pad.root, 'drone'], [bess.root, 'grid'], [dp.root, 'grid'], [xf.root, 'grid'], [gen.root, 'gen'], [tr.root, 'truck'], [wsh.root, 'line'], [cut.root, 'line'], [pak.root, 'line'], [pal.root, 'line'], [hbin.root, 'field'], [trac.root, 'tractor'], ...Object.values(IMPL).map((m) => [m.root, 'tractor']), [mil.root, 'chain'], [ovn.root, 'chain'], [bag.root, 'chain'], [pal2.root, 'chain'], [dgm.root, 'digester'], [stw.root, 'steward'], [rov.root, 'steward'], [lc.root, 'logic']]);
+const KEY_OF = new Map([[tw.root, 'wind'], [sa.root, 'solar'], [tk.root, 'tank'], [pj.root, 'pump'], [dr.root, 'drone'], [pad.root, 'drone'], [bess.root, 'grid'], [dp.root, 'grid'], [xf.root, 'grid'], [gen.root, 'gen'], [tr.root, 'truck'], [wsh.root, 'line'], [cut.root, 'line'], [pak.root, 'line'], [pal.root, 'line'], [hbin.root, 'field'], [trac.root, 'tractor'], ...Object.values(IMPL).map((m) => [m.root, 'tractor']), [mil.root, 'chain'], [ovn.root, 'chain'], [bag.root, 'chain'], [pal2.root, 'chain'], [dgm.root, 'digester'], [stw.root, 'steward'], [rov.root, 'steward'], [lc.root, 'logic'], [bay.root, 'workshop']]);
 KEY_OF.forEach((_, o) => outlines.register(o));
-const ROOT_OF = { wind: tw.root, solar: sa.root, tank: tk.root, pump: pj.root, drone: dr.root, gen: gen.root, grid: dp.root, truck: tr.root, line: cut.root, field: hbin.root, tractor: trac.root, chain: ovn.root, digester: dgm.root, steward: rov.root, logic: lc.root, network: null, build: null };
+const ROOT_OF = { wind: tw.root, solar: sa.root, tank: tk.root, pump: pj.root, drone: dr.root, gen: gen.root, grid: dp.root, truck: tr.root, line: cut.root, field: hbin.root, tractor: trac.root, chain: ovn.root, digester: dgm.root, steward: rov.root, logic: lc.root, workshop: bay.root, network: null, build: null };
 
 // ---------- simulations ----------
 const wind = new WindTurbine(), solar = new SolarArray(), tank = new StorageTank(), pump = new PumpJack();
@@ -572,6 +613,7 @@ const ACTIONS = {
   feed: { label: 'Feed the hungry zones', target: 'soil steward', apply: (on) => { if (on) steward.requests.dose = true; } },
   irrigate: { label: 'Send the drone to water', target: 'soil steward', apply: (on) => { if (on) steward.requests.irrigate = true; } }
 };
+const custom = new DS.CustomMachine();
 const logic = new LogicController(SENSORS, ACTIONS, signalled);
 logic.add({ sensor: 'battery', cmp: '<', value: 20, action: 'gen.start' });
 logic.add({ sensor: 'dtemp', cmp: '<', value: 32, action: 'chp.run' });
@@ -598,7 +640,7 @@ function updateEnv() {
 function loads() {
   const pumpReq = pump.on && !pump.fault ? (tank.accepts() ? pump.level.motorKw * (0.6 + 0.4 * Math.max(pump.spmNow, pump.level.spm * 0.3) / pump.level.spm) / pump.efficiency() : 0.08) : 0.02;
   const charger = drone.on && drone.state === 'charge' && drone.battPct() < 0.995 ? drone.def.chargeKw : 0.03;
-  return { pump: pumpReq + steward.powerKw(), charger, line: lineSim.powerKw() + chain.powerKw() + 0.08, lights: env.dark ? LIGHT_KW : 0.04 };
+  return { pump: pumpReq + steward.powerKw(), charger, line: lineSim.powerKw() + chain.powerKw() + 0.08 + custom.powerKw(), lights: env.dark ? LIGHT_KW : 0.04 };
 }
 let refillLpm = 0, autoMissionT = 0;
 const TRACTOR_CB = {
@@ -627,6 +669,7 @@ function simStep(dt) {
     if (job && tractorSim.startJob(job, fieldSim)) toast({ harvest: 'The field is ready: the tractor goes out to harvest', plow: 'Harvest done: the tractor plows the stubble', seed: `Plowed: the tractor sows ${CROPS[fieldSim.next].name.toLowerCase()}` }[job]);
   }
   wallet += chain.tick(dt);
+  custom.powered = grid.powered.line && find(bay, 'supply').links.length > 0 && !!wsLink; wallet += custom.tick(dt);
   wallet += lineSim.tick(dt, tank);
   if (!steward.running() && drone.state === 'done' && field.wetness() < 0.45) { autoMissionT += dt; if (autoMissionT > 20) { autoMissionT = 0; drone.newMission(); toast('The field is drying out: the drone starts a new spray mission'); } } else autoMissionT = 0;
 }
@@ -658,7 +701,7 @@ addStatic(box3(0.45, 0.45, 0.95), CX, 0.45, CROSS0 + 0.95); addStatic(box3(0.42,
 addStatic(box3(1.5, 0.08, 0.95), DIG_POS.x, 0.08, DIG_POS.z); addStatic(new CANNON.Cylinder(0.8, 0.8, 1.9, 12), DIG_POS.x - 0.55, 0.95, DIG_POS.z); addStatic(box3(0.4, 0.55, 0.95), DIG_POS.x + 0.9, 0.55, DIG_POS.z);
 addStatic(box3(1.3, 0.08, 1.1), STW_POS.x, 0.08, STW_POS.z); addStatic(box3(0.48, 0.83, 0.3), STW_POS.x - 0.55, 0.83, STW_POS.z - 0.5); addStatic(box3(0.3, 1.9, 0.3), STW_POS.x + 0.6, 1.9, STW_POS.z - 0.5);
 addStatic(new CANNON.Cylinder(0.45, 0.45, 1.9, 10), STW_POS.x + 0.6, 0.95, STW_POS.z + 0.55); addStatic(box3(0.13, 1.25, 0.13), STW_POS.x + 0.15, 1.25, STW_POS.z + 2.6);
-addStatic(box3(0.45, 0.85, 0.3), LC_POS.x, 0.85, LC_POS.z); addStatic(box3(0.5, 0.45, 0.28), washT.root.position.x, 0.45, washT.root.position.z);
+addStatic(box3(0.45, 0.85, 0.3), LC_POS.x, 0.85, LC_POS.z); [-2.9, 2.9].forEach((x) => [-1.8, 1.8].forEach((z) => addStatic(box3(0.1, 1.7, 0.1), WS_POS.x - x, 1.7, WS_POS.z - z))); addStatic(box3(3.2, 0.07, 2.1), WS_POS.x, 0.07, WS_POS.z); addStatic(box3(1.35, 0.55, 0.6), WS_POS.x, 0.55, WS_POS.z); addStatic(box3(1.0, 0.5, 0.3), WS_POS.x + 1.5, 0.5, WS_POS.z + 1.6); addStatic(box3(0.7, 1.0, 0.3), WS_POS.x - 1.9, 1.0, WS_POS.z + 1.6); addStatic(box3(0.5, 0.45, 0.28), washT.root.position.x, 0.45, washT.root.position.z);
 const rovBody = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC }); rovBody.addShape(box3(0.6, 0.35, 0.68), new CANNON.Vec3(0, 1.6, 0)); W.addBody(rovBody);
 const tracBody = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC }); tracBody.addShape(box3(0.9, 0.9, 1.9), new CANNON.Vec3(0, 1.0, 0)); W.addBody(tracBody); addStatic(box3(0.6, 0.3, 0.6), -1.75, 0.3, LZ);
 addStatic(box3(0.5, 0.6, 0.35), 2.2, 0.6, LZ - 1.6);
@@ -680,7 +723,7 @@ function addProp(kind, x, y, z, o) {
   if (props.filter((q) => q.spawned).length > 24) { const old = props.find((q) => q.spawned); W.removeBody(old.body); scene.remove(old.mesh); props.splice(props.indexOf(old), 1); }
   return p;
 }
-[[3, 0.35, 6.5], [3.75, 0.35, 6.4], [3.35, 1.06, 6.45], [4.5, 0.35, 7.3]].forEach(([x, y, z], i) => addProp('crate', x, y, z, { ry: i * 0.2 }));
+[[-4.9, 0.35, 5.2], [-4.15, 0.35, 5.1], [-4.55, 1.06, 5.15], [-3.4, 0.35, 5.9]].forEach(([x, y, z], i) => addProp('crate', x, y, z, { ry: i * 0.2 }));
 [['#2e6aa8', 8.3, -9.6], ['#d6402c', 8.95, -9.4], ['#2e6aa8', 8.6, -10.2], ['#e5b833', 9.3, -10.1]].forEach(([c, x, z]) => addProp('barrel', x, 0.44, z, { color: c }));
 for (let i = 0; i < 8; i++) addProp('pumpkin', -4.6 + (i % 3) * 0.55, 0.25 + Math.floor(i / 5) * 0.45, 9.0 + Math.floor(i / 3) * 0.55, { seed: i + 3 });
 [[-6.5, 0.6, 8], [-5.1, 0.6, 8.6], [-5.8, 1.8, 8.3]].forEach(([x, y, z], i) => addProp('hay', x, y, z, { ry: 0.3 + i * 0.4 }));
@@ -786,6 +829,7 @@ function drawScreens() {
   const F = grid.flows, socP = grid.soc / grid.level.batteryKwh;
   drawScreen(bess.socScreen, 'BATTERY', [[Math.round(socP * 100) + '%'], [F.battIn > 0.05 ? `charging +${f1(F.battIn)} kW` : F.battOut > 0.05 ? `supplying -${f1(F.battOut)} kW` : 'standby'], [`${f1(grid.soc)} / ${grid.level.batteryKwh} kWh`]], [socP, '#3fd27a']);
   drawScreen(dgm.screen, 'DIGESTER', [[digester.chpOn ? f1(digester.output) + ' kW' : Math.round(digester.tempC) + ' °C'], [`gas ${Math.round(digester.gasFrac() * 100)}%  ${Math.round(digester.tempC)} °C`], [`${Math.round(digester.massKg)} kg  tote ${digester.queue.length}`]], [Math.min(1, digester.gasFrac()), '#ffd23f']);
+  if (wsBuilt && wsBuilt.screen && custom.built) { const S = custom.ev().stats; drawScreen(wsBuilt.screen, custom.built.name.slice(0, 14).toUpperCase(), [[(S.rate * custom.run).toFixed(1) + '/min'], [`${Math.round(custom.tempC)} °C  supply ${Math.floor(custom.supply)}`], [custom.reason().slice(0, 22)]], [custom.out / custom.def.palletCap, '#3fd27a']); }
   const R = steward.rover;
   drawScreen(rov.screen, 'ROVER', [[R.state.toUpperCase()], [`batt ${Math.round(R.batt / steward.def.battKwh * 100)}%`], [`tank ${Math.round(R.tankL)} L`]], [R.batt / steward.def.battKwh, '#3fd27a']);
   { // steward console: the nitrogen map as it knows it, with the rover's position
@@ -813,8 +857,8 @@ function drawScreens() {
 }
 
 // ---------- UI ----------
-const KEYS = ['overview', 'network', 'field', 'steward', 'tractor', 'line', 'digester', 'chain', 'logic', 'drone', 'pump', 'tank', 'wind', 'solar', 'gen', 'grid', 'truck'];
-const NAMES = { overview: 'Whole yard', wind: 'Wind turbine', solar: 'Solar array', tank: 'Water tank', pump: 'Pump jack', drone: 'Spray drone', gen: 'Generator', grid: 'Power network', truck: 'Truck', field: 'Crop field', line: 'Processing line', tractor: 'Tractor', chain: 'Bakery chain', digester: 'Digester', steward: 'Soil steward', logic: 'Controller', network: 'Diagnostics' };
+const KEYS = ['overview', 'network', 'workshop', 'field', 'steward', 'tractor', 'line', 'digester', 'chain', 'logic', 'drone', 'pump', 'tank', 'wind', 'solar', 'gen', 'grid', 'truck'];
+const NAMES = { overview: 'Whole yard', wind: 'Wind turbine', solar: 'Solar array', tank: 'Water tank', pump: 'Pump jack', drone: 'Spray drone', gen: 'Generator', grid: 'Power network', truck: 'Truck', field: 'Crop field', line: 'Processing line', tractor: 'Tractor', chain: 'Bakery chain', digester: 'Digester', steward: 'Soil steward', logic: 'Controller', network: 'Diagnostics', workshop: 'Workshop' };
 $('picker').innerHTML = KEYS.map((k) => `<button type="button" class="pick" id="pick-${k}" aria-pressed="${k === 'overview'}">${k === 'overview' ? '' : `<span class="dot" id="dot-${k}"></span>`}${NAMES[k]}</button>`).join('');
 fieldSim.act = (id, w) => {
   if (id === 'harvest') { const c = fieldSim.crop, n = fieldSim.harvest(); if (!n) return { msg: 'Nothing is ready yet' }; lineSim.addToBin(c, n, CROPS[c].value, fieldSim.takeGrades(n)); return { msg: `Hand-harvested ${n} ${CROPS[c].name.toLowerCase()} into the line's hopper` }; }
@@ -823,9 +867,9 @@ fieldSim.act = (id, w) => {
   if (id.startsWith('crop-')) { fieldSim.setCrop(id.slice(5)); return { msg: `${CROPS[fieldSim.next].name} will be sown after the next plowing` }; }
   return { msg: '' };
 };
-const SIMS = { wind, solar, tank, pump, drone, gen: gsim, grid, truck: truckSim, field: fieldSim, line: lineSim, tractor: tractorSim, chain, digester, steward, logic, network: null, build: null };
+const SIMS = { wind, solar, tank, pump, drone, gen: gsim, grid, truck: truckSim, field: fieldSim, line: lineSim, tractor: tractorSim, chain, digester, steward, logic, workshop: custom, network: null, build: null };
 // ---------- diagnostics: every machine's ports, power, faults and process problems, with the fix ----------
-const MODELS_OF = { line: [hbin, belt, wsh, cut, pak, chu, pal], chain: [cross, inc, mil, beltM, beltB, ovn, bag, chu2, pal2], wind: [tw], solar: [sa], tank: [tk], pump: [pj], drone: [pad], gen: [gen], grid: [dp, bess, xf], tractor: [trac], digester: [dgm], steward: [stw], logic: [lc] };
+const MODELS_OF = { workshop: [bay], line: [hbin, belt, wsh, cut, pak, chu, pal], chain: [cross, inc, mil, beltM, beltB, ovn, bag, chu2, pal2], wind: [tw], solar: [sa], tank: [tk], pump: [pj], drone: [pad], gen: [gen], grid: [dp, bess, xf], tractor: [trac], digester: [dgm], steward: [stw], logic: [lc] };
 const CIRCUIT_OF = { line: 'line', chain: 'line', logic: 'line', pump: 'pump', steward: 'pump', drone: 'charger' };
 function diagnose(key) {
   const out = [], add = (lvl, text, fix) => out.push({ lvl, text, fix: fix || '' });
@@ -874,6 +918,19 @@ function diagnose(key) {
   }
   if (key === 'tank' && tank.frac() < 0.1) add('warn', 'Tank almost empty', 'Check the pump jack');
   if (key === 'gen' && gsim.level.tankL && gsim.fuel < gsim.level.tankL * 0.15) add('warn', 'Diesel low', 'Refuel the generator');
+  if (key === 'workshop') {
+    const E = DS.evaluate(custom.draft);
+    if (!custom.built) add('info', 'Nothing built yet', 'Design a machine in the Operation tab, test it, then build it');
+    else {
+      const B = custom.ev(); B.issues.filter((i) => i.lvl === 'warn').forEach((i) => add('warn', i.text, i.fix));
+      if (!B.stats.electric && custom.fuel < 4) add('error', 'Out of diesel', 'Refuel it');
+      if (B.stats.electric && !wsLink) add('error', 'The motor is not wired to the pedestal', 'Build the machine again');
+      if (!custom.supply && !custom.hopper) add('warn', `No ${B.stats.input} on the supply pallet`, 'Buy a supply pallet');
+      if (custom.tempC > 85) add('warn', `Running hot: ${Math.round(custom.tempC)} °C`, 'Add cooling or a smart controller');
+      if (custom.out >= custom.def.palletCap) add('warn', 'Output pallet full', 'Sell the pallet');
+    }
+    if (!E.ok) add('info', 'The draft design has errors', E.issues.filter((i) => i.lvl === 'error').map((i) => i.text).join('; '));
+  }
   if (key === 'logic') logic.rules.forEach((r, i) => { const pr = logic.problem(r); if (r.enabled && pr) add('error', `Rule ${i + 1}: ${pr}`, 'Run a signal cable from the controller to it'); });
   if (!out.some((d) => d.lvl !== 'info')) add('ok', 'No problems found', s && s.reason ? s.reason() : '');
   return out;
@@ -906,7 +963,7 @@ const VIEWS = {
   field: { pos: [14, 9, 26], tgt: [21, 0.5, 12] },
   line: { pos: [6, 5.5, 21.5], tgt: [5, 1, 13] },
   chain: { pos: [5.5, 5.2, 24.5], tgt: [7.5, 1, 18] }, tractor: null, build: null,
-  digester: { pos: [-2.6, 4.4, 5.4], tgt: [1.8, 1, 10.4] }, steward: null, logic: { pos: [2.4, 2.6, 19.6], tgt: [0.6, 1, 16] }, network: { pos: [26, 21, 38], tgt: [8, 1, 6] },
+  digester: { pos: [-3.6, 4.6, 4.2], tgt: [1.2, 1, 9.4] }, steward: null, logic: { pos: [1.3, 2.6, 20.2], tgt: [-0.5, 1, 16.6] }, workshop: { pos: [10.2, 5.0, 16.7], tgt: [14.2, 1.2, 22.6] }, network: { pos: [26, 21, 38], tgt: [8, 1, 6] },
   wind: { pos: [-6, 9, 4], tgt: [-20, 8.5, -14] },
   solar: { pos: [-4.5, 4.2, 12.5], tgt: [-10.5, 1.2, 5] },
   tank: { pos: [18.5, 5.2, 0.5], tgt: [12, 2.4, -7] },
@@ -917,6 +974,7 @@ const VIEWS = {
   truck: null
 };
 const NOTES = {
+  workshop: 'Design your own machine in the Operation tab: pick a frame, a drive, a transmission, a process module, an input, an output, a control and cooling. It works only as well as its parts: no motor means nothing turns, a direct shaft shears under a press, a belt slips under heavy loads, an underpowered drive runs slow, a diesel without a radiator overheats, a heavy press shakes a light frame apart. Test it, then build it; the blueprint becomes a real machine on the bay, wired to the workshop pedestal. Buy supply pallets and sell what it makes. Save good designs and reload them later.',
   digester: 'Grade C produce that the optical sorter rejects is not thrown away. The auger lifts it from the reject tote into a twin-shaft shredder, and the heated digester turns it into biogas and digestate. Biogas fills the membrane dome; the engine burns it into power for the yard and its waste heat keeps the bacteria at 38 °C (below 30 °C they slow right down). When the dome is full the flare burns the surplus. Digestate is pumped through a buried main to the soil steward as liquid fertiliser.',
   steward: 'The soil steward watches the field. Its mast scans moisture over every zone; nitrogen is only known where the rover has pushed its probe into the ground, and a sample is good for 8 hours. The straddle rover rides over the rows through the east gate, samples stale zones, and feeds hungry ones with digestate from its tank. It charges and refills at the dock. When too many zones dry out it sends the spray drone. Use the soil map to see what it knows.',
   logic: 'Write the yard\'s rules: if a sensor is above or below a value, an action holds while that stays true and releases when it does not. Sensors read anything in the yard; actions only reach machines that a purple signal cable connects to the controller. Edit the rules in the Operation tab.',
@@ -978,7 +1036,14 @@ const dropAt = () => { const t = controls.target; return [t.x + (Math.random() -
 $('p-crate').onclick = () => { const [x, y, z] = dropAt(); addProp('crate', x, y, z, { spawned: true, ry: Math.random() * 3, w: [Math.random() * 2, Math.random() * 2, 0] }); };
 $('p-pumpkins').onclick = () => { for (let i = 0; i < 5; i++) { const [x, y, z] = dropAt(); addProp('pumpkin', x, y + i * 0.6, z, { spawned: true, seed: i + 20 }); } };
 $('p-barrel').onclick = () => { const t = controls.target, d = new V().subVectors(t, camera.position).setY(0).normalize(); addProp('barrel', t.x - d.x * 6, 0.32, t.z - d.z * 6, { spawned: true, rz: Math.PI / 2, rx: 0, ry: Math.atan2(d.x, d.z), v: [d.x * 6, 0, d.z * 6], color: '#d6402c' }); };
+custom.actExtra = (id) => {
+  if (id === 'ws-save') { const d = DS.cleanDesign(custom.draft), i = custom.saved.findIndex((q) => q.name === d.name); if (i >= 0) custom.saved[i] = d; else { if (custom.saved.length >= 8) return { msg: 'Eight designs saved: delete one first' }; custom.saved.push(d); } return { msg: `Design "${d.name}" saved` }; }
+  if (id.startsWith('ws-load-')) { const d = custom.saved[+id.slice(8)]; if (d) { custom.draft = DS.cleanDesign(d); wsRefreshDraft(); return { msg: `Loaded "${d.name}" into the designer` }; } }
+  if (id.startsWith('ws-del-')) { const d = custom.saved.splice(+id.slice(7), 1)[0]; return { msg: d ? `Deleted "${d.name}"` : '' }; }
+  return null;
+};
 function doAction(id) {
+  if (selected === 'workshop') { const x = custom.actExtra(id); if (x) { if (x.msg) toast(x.msg); return render(true); } if (id === 'ws-build') { const r = custom.act(id, wallet); if (r.cost) { wallet -= r.cost; wsRebuildBuilt(); wsRefreshDraft(); save(); } toast(r.msg); return render(true); } }
   if (selected === 'overview') { if (id === 'mission') { const r = drone.act('mission', wallet); toast(r.msg); } return render(true); }
   const s = SIMS[selected];
   const res = s.act(id, wallet, fieldSim);
@@ -1023,6 +1088,11 @@ function render(force) {
   $('i-sub').innerHTML = `${pd.sub} · <span class="pill" style="color:${STC[pd.status]}">${pd.status}</span>`;
   const body = $('tab-body');
   if (tab === 'diagnose') { body.dataset.key = ''; body.innerHTML = `<div class="diag">${diagnose(selected).map((d) => `<div class="${d.lvl}">${d.text}${d.fix ? `<small>${d.fix}</small>` : ''}</div>`).join('')}</div>`; return; }
+  if (selected === 'workshop' && tab === 'operation') {
+    const key = JSON.stringify([custom.draft, custom.saved.map((d) => d.name), !!custom.built]);
+    if (body.dataset.key !== key) { body.innerHTML = designerHTML(); body.dataset.key = key; }
+    return;
+  }
   if (selected === 'logic' && tab === 'operation') {
     // rebuild the editor only when the rules change, so open dropdowns are not reset; live readings update in place
     const key = JSON.stringify(logic.rules.map((r) => [r.id, r.sensor, r.cmp, r.value, r.action, r.enabled]));
@@ -1039,6 +1109,18 @@ function render(force) {
   $('tab-body').innerHTML = h;
 }
 
+function designerHTML() {
+  const d = DS.cleanDesign(custom.draft), E = DS.evaluate(d), S = E.stats;
+  const sel = (k) => `<div class="row"><span style="min-width:104px">${DS.MOUNT_NAMES[k]}</span><select data-mount="${k}" aria-label="${DS.MOUNT_NAMES[k]}">${Object.entries(DS.PARTS[k]).map(([id, p]) => `<option value="${id}"${id === d[k] ? ' selected' : ''}>${p.name}${p.price ? ' · $' + p.price.toLocaleString() : ''}</option>`).join('')}</select></div>${DS.PARTS[k][d[k]].note ? `<div class="live">${DS.PARTS[k][d[k]].note}</div>` : ''}`;
+  return `<div class="rules"><div class="rule"><div class="row"><b>Design</b><input data-dname="1" value="${d.name.replace(/"/g, '&quot;')}" aria-label="Design name" style="width:auto;flex:1"></div>${DS.MOUNTS.map(sel).join('')}</div>
+    <div class="rule"><div class="row"><b>Test result</b></div><dl>
+      <dt>Cost</dt><dd>$${S.cost.toLocaleString()}</dd><dt>Makes</dt><dd>${S.output ? `${S.rate.toFixed(1)} ${S.output} per minute` : '–'}</dd>
+      <dt>Drive train</dt><dd>${S.load ? `${S.avail.toFixed(1)} of ${S.load} kW (${Math.round(Math.min(1, S.speed) * 100)}% speed)` : '–'}</dd><dt>Running temperature</dt><dd>about ${Math.round(S.tempSS)} °C</dd>
+      <dt>Power</dt><dd>${S.electric ? S.kwDraw.toFixed(1) + ' kW from the workshop' : S.fuelLph ? S.fuelLph + ' L of diesel per hour' : '–'}</dd><dt>Margin</dt><dd>${S.output ? '$' + S.margin.toFixed(2) + ' per minute before power' : '–'}</dd></dl>
+      <div class="diag">${E.issues.map((i) => `<div class="${i.lvl}">${i.text}${i.fix ? `<small>${i.fix}</small>` : ''}</div>`).join('')}</div>
+      <div class="row"><button type="button" class="btn primary" data-act="ws-build"${E.ok ? '' : ' disabled'}>${custom.built ? 'Rebuild' : 'Build'} for $${S.cost.toLocaleString()}</button><button type="button" class="btn" data-act="ws-save">Save design</button></div></div>
+    ${custom.saved.length ? `<div class="rule"><div class="row"><b>Saved designs</b></div>${custom.saved.map((sd, i) => `<div class="row"><span style="flex:1">${sd.name}</span><button type="button" class="btn" data-act="ws-load-${i}">Load</button><button type="button" class="btn" data-act="ws-del-${i}">Delete</button></div>`).join('')}</div>` : ''}</div>`;
+}
 function rulesHTML() {
   const opt = (obj, cur) => Object.entries(obj).map(([k, v]) => `<option value="${k}"${k === cur ? ' selected' : ''}>${v.label}</option>`).join('');
   return `<div class="rules">${logic.rules.map((r, i) => `<div class="rule" data-rid="${r.id}"><div class="row"><b>Rule ${i + 1}</b><span class="live" data-live="${r.id}"></span></div>
@@ -1049,6 +1131,10 @@ function rulesHTML() {
     <div class="row"><button type="button" class="btn" data-act="rule-tog-${r.id}">${r.enabled ? 'Disable' : 'Enable'}</button><button type="button" class="btn" data-act="rule-del-${r.id}">Remove</button></div></div>`).join('')}
     <button type="button" class="btn primary" data-act="rule-add"${logic.rules.length >= logic.level.maxRules ? ' disabled' : ''}>Add a rule</button></div>`;
 }
+$('tab-body').addEventListener('change', (e) => {
+  const el = e.target;
+  if (el.dataset && (el.dataset.mount || el.dataset.dname)) { if (el.dataset.mount) custom.draft[el.dataset.mount] = el.value; else custom.draft.name = el.value.slice(0, 40) || 'Untitled'; custom.draft = DS.cleanDesign(custom.draft); wsRefreshDraft(); render(true); return; }
+}, true);
 $('tab-body').addEventListener('change', (e) => {
   const el = e.target, r = el.dataset && el.dataset.rule && logic.rules.find((q) => q.id === +el.dataset.rule); if (!r) return;
   if (r.active) { ACTIONS[r.action].apply(false, r); r.active = false; }
@@ -1158,7 +1244,12 @@ function runAudit() {
   MODELS.forEach((m) => { if (m === pak || m === gen) return; F.push(...VA.auditGeometry(m, { flying: m === trac || Object.values(IMPL).includes(m) })); });
   extra.forEach((m) => F.push(...VA.auditGeometry(Object.assign({}, m.root === pak.root ? pak : m.root === gen.root ? gen : {}, m), { flying: m.flying })));
   F.push(...VA.auditNetwork(MODELS, net));
-  const cols = [tw, sa, tk, pj, bess, dp, xf, gen, trough, wsh, cut, pak, hbin, washT, mil, ovn, bag, dgm, stw, lc, ...placed].map((m) => {
+  // every process module with every drive and transmission, and the other mounts rotated through their options
+  let k = 0; Object.keys(DS.PARTS.process).filter((p) => p !== 'none').forEach((process) => ['motor3', 'motor7', 'diesel'].forEach((drive) => ['shaft', 'belt', 'gearbox'].forEach((transmission) => {
+    const d = { name: `${process}/${drive}/${transmission}`, frame: k % 2 ? 'heavy' : 'light', drive, transmission, process, input: k % 2 ? 'screw' : 'hopper', output: k % 3 ? 'chute' : 'bagger', control: k % 2 ? 'smart' : 'manual', cooling: ['none', 'fan', 'radiator'][k % 3] }; k++;
+    const m = DS.build3D(d); m.root.updateMatrixWorld(true); F.push(...VA.auditGeometry({ root: m.root, name: 'Design ' + d.name, ports: [] }, {}));
+  })));
+  const cols = [tw, sa, tk, pj, bess, dp, xf, gen, trough, wsh, cut, pak, hbin, washT, mil, ovn, bag, dgm, stw, lc, bay, ...placed].map((m) => {
     const mb = new THREE.Box3().setFromObject(m.root);
     const hits = STATICS.filter((b) => { const lo = b.aabb.lowerBound, hi = b.aabb.upperBound; return new THREE.Box3(new V(lo.x, lo.y, lo.z), new V(hi.x, hi.y, hi.z)).intersectsBox(mb); });
     const u = new THREE.Box3(); hits.forEach((b) => { const lo = b.aabb.lowerBound, hi = b.aabb.upperBound; if (mb.containsPoint(new V((lo.x + hi.x) / 2, Math.max(lo.y, mb.min.y), (lo.z + hi.z) / 2))) u.union(new THREE.Box3(new V(lo.x, 0, lo.z), new V(hi.x, 1, hi.z))); });
@@ -1183,7 +1274,15 @@ const gStw = glow.attach(stw.root, { state: 'waiting' }); gStw.beacon({ position
 const gRov = glow.attach(rov.root, { state: 'waiting' }); gRov.beacon({ position: rov.beaconAt, radius: 0.045 });
 const gLc = glow.attach(lc.root, { state: 'running' }); gLc.led({ position: lc.ledAt, size: 0.03 });
 const C_OK = lin('#3fd27a'), C_ACT = lin('#ffb02e'), C_BAD = lin('#ff5a48');
+function animateWorkshop(dt) {
+  const m = wsBuilt, sp = Math.min(speed, 4), r = custom.run || 0;
+  if (m && m.root.visible) m.spin.forEach((s) => { s.g.rotation[s.axis] += dt * sp * r * 18 * s.k; });
+  if (m && m.anim.clamp) m.anim.clamp.position.y = 0.7 + Math.max(0, Math.sin(performance.now() / 300)) * 0.05 * r;
+  if (m) { const st = custom.status(); m.lamp.material.emissive.copy(st === 'running' ? C_OK : st === 'stopped' ? C_BAD : C_ACT); m.lamp.material.emissiveIntensity = custom.on ? 3 : 0.2; }
+  bay.supply.show(custom.supply / custom.def.supplyCap); bay.output.show(custom.out / custom.def.palletCap);
+}
 function animateTech(dt) {
+  animateWorkshop(dt);
   const D = digester, sp = Math.min(speed, 4);
   dgm.rotors.forEach((r, i) => { r.rotation.z += (D.shredT > 0 ? 9 : 0) * dt * sp * (i ? -1 : 1); });
   if (D.augerT > 0) dgm.auger.rotateY(dt * 7 * sp);
@@ -1255,7 +1354,9 @@ function animateFarm(dt) {
   if (imp && imp.towed && imp.axle) {
     // drawbar follow: the axle trails the hitch at a fixed distance; when reversing it is kept straight behind
     trac.root.updateMatrixWorld(true); const H = trac.hitch.pos.clone().applyMatrix4(trac.root.matrixWorld), A = imp.axle;
-    if (T.vel < -0.01) { A.x += (H.x - Math.sin(T.heading) * imp.axleBack - A.x) * Math.min(1, dt * 4); A.z += (H.z - Math.cos(T.heading) * imp.axleBack - A.z) * Math.min(1, dt * 4); }
+    // reversing straightens the drawbar in proportion to the distance backed (not per frame, so it holds at any game speed)
+    const moved = imp.lastH ? Math.hypot(H.x - imp.lastH.x, H.z - imp.lastH.z) : 0; imp.lastH = { x: H.x, z: H.z };
+    if (T.vel < -0.01) { const k = Math.min(1, moved * 1.8); A.x += (H.x - Math.sin(T.heading) * imp.axleBack - A.x) * k; A.z += (H.z - Math.cos(T.heading) * imp.axleBack - A.z) * k; }
     else { const dx = H.x - A.x, dz = H.z - A.z, d = Math.hypot(dx, dz) || 1; A.x = H.x - dx / d * imp.axleBack; A.z = H.z - dz / d * imp.axleBack; }
     imp.root.position.copy(H); imp.root.rotation.set(0, Math.atan2(H.x - A.x, H.z - A.z), 0);
     imp.wheels.forEach((w) => { w.rotation.x += Math.abs(T.vel) * dt / 0.42; });
@@ -1349,7 +1450,7 @@ const buildSim = {
 SIMS.build = buildSim;
 
 // ---------- saving: automatic every 30 s and when the page is hidden; a backup copy guards against a bad write ----------
-const SAVE_KEY = 'fw.yard.save.v1', SIMLIST = () => ({ wind, solar, tank, pump, drone, grid, line: lineSim, chain, tractor: tractorSim, digester, steward });
+const SAVE_KEY = 'fw.yard.save.v1', SIMLIST = () => ({ wind, solar, tank, pump, drone, grid, line: lineSim, chain, tractor: tractorSim, digester, steward, workshop: custom });
 function snapshot() {
   const lv = {}, cond = {}; Object.entries(SIMLIST()).forEach(([k, sm]) => { lv[k] = sm.levelIndex; cond[k] = +sm.condition.toFixed(2); });
   return { v: 1, t: Date.now(), wallet: Math.round(wallet * 100) / 100, hour, lv, cond, genL: gsim.levelIndex, genFuel: gsim.fuel, tankL: tank.volumeL, soc: grid.soc, gridEarned: grid.earned,
@@ -1357,7 +1458,8 @@ function snapshot() {
     line: { earned: lineSim.earned, sold: lineSim.sold, bin: lineSim.bin.length }, chainS: { earned: chain.earned, sold: chain.sold, made: chain.made }, tractorFuel: tractorSim.fuel,
     tech: { dig: { massKg: digester.massKg, gasM3: digester.gasM3, tempC: digester.tempC, digestateL: digester.digestateL, mode: digester.mode, queue: digester.queue.slice(0, 40) },
       stw: { tankL: steward.tankL, auto: steward.auto, nTarget: steward.nTarget, map: steward.map.map((m) => [m.n, m.comp, Math.round(steward.time - m.t)]), batt: steward.rover.batt, roverL: steward.rover.tankL },
-      rules: logic.rules.map((r) => ({ sensor: r.sensor, cmp: r.cmp, value: r.value, action: r.action, enabled: r.enabled })), logicOn: logic.on },
+      rules: logic.rules.map((r) => ({ sensor: r.sensor, cmp: r.cmp, value: r.value, action: r.action, enabled: r.enabled })), logicOn: logic.on,
+      ws: { built: custom.built, draft: custom.draft, saved: custom.saved, supply: custom.supply, out: custom.out, fuel: custom.fuel, made: custom.made, earned: custom.earned, spent: custom.spent, on: custom.on } },
     buildings: placed.map((b) => ({ kind: b.kind, x: b.x, z: b.z, rot: b.rot })) };
 }
 function save() { if (AUDIT || qs.has('fresh')) return false; try { const s = JSON.stringify(snapshot()), old = localStorage.getItem(SAVE_KEY); if (old) localStorage.setItem(SAVE_KEY + '.bak', old); localStorage.setItem(SAVE_KEY, s); return true; } catch (e) { return false; } }
@@ -1379,14 +1481,15 @@ function applySave(s) {
     (w.map || []).forEach((m, i) => { if (steward.map[i]) Object.assign(steward.map[i], { n: m[0], comp: m[1], t: m[0] === null ? -1e9 : -m[2] }); });
     if (Array.isArray(s.tech.rules)) { logic.rules.length = 0; s.tech.rules.forEach((r) => { if (SENSORS[r.sensor] && ACTIONS[r.action]) logic.add(r); }); }
     logic.on = s.tech.logicOn !== false;
+    const ws = s.tech.ws; if (ws) { custom.built = ws.built ? DS.cleanDesign(ws.built) : null; custom.draft = DS.cleanDesign(ws.draft); custom.saved = (ws.saved || []).slice(0, 8).map(DS.cleanDesign); Object.assign(custom, { supply: +ws.supply || 0, out: ws.out | 0, fuel: +ws.fuel || 0, made: ws.made | 0, earned: +ws.earned || 0, spent: +ws.spent || 0, on: ws.on !== false }); }
   }
   lineSim.earned = s.line.earned; lineSim.sold = s.line.sold; for (let i = 0; i < Math.min(200, s.line.bin || 0); i++) lineSim.addToBin(fieldSim.crop, 1, CROPS[fieldSim.crop].value);
   chain.earned = s.chainS.earned; chain.sold = s.chainS.sold; Object.assign(chain.made, s.chainS.made || {}); tractorSim.fuel = s.tractorFuel;
   s.buildings.forEach((b) => { if (BD.BUILDINGS[b.kind]) placeBuilding(b.kind, b.x, b.z, b.rot); });
 }
 const saved = AUDIT || qs.has('fresh') ? null : readSave();
-if (saved) { try { applySave(saved); setTimeout(() => toast('Saved farm loaded'), 300); } catch (e) { console.warn('Save could not be applied', e); } }
-else placeBuilding('barn', -16, 12, Math.PI / 2);
+if (saved) { try { applySave(saved); wsRebuildBuilt(); wsRefreshDraft(); setTimeout(() => toast('Saved farm loaded'), 300); } catch (e) { console.warn('Save could not be applied', e); } }
+else { placeBuilding('barn', -16, 12, Math.PI / 2); wsRefreshDraft(); }
 setInterval(save, 30000); addEventListener('visibilitychange', () => { if (document.hidden) save(); });
 $('save-now').onclick = () => toast(save() ? 'Farm saved' : 'Saving is not available here');
 $('new-game').onclick = () => { if (!confirm('Start a new farm? The saved one is deleted.')) return; try { localStorage.removeItem(SAVE_KEY); localStorage.removeItem(SAVE_KEY + '.bak'); } catch (e) { /* ignore */ } location.reload(); };
@@ -1421,7 +1524,7 @@ function frame(dt) {
   if (rain.visible) { const p = rainG.attributes.position, t = controls.target; for (let i = 0; i < rainN; i++) { let y = p.getY(i) - dt * 14; if (y < 0) y += 30; p.setY(i, y); } rain.position.set(t.x, 0, t.z); p.needsUpdate = true; }
   applyLighting();
 }
-window.__fw = { digester, steward, logic, rov, stw, dgm, lc, diagnose, setSoil: (m) => document.querySelector(`[data-soil="${m}"]`).click(), tractorSim, chain, placed, startBuild, moveGhost, confirmBuild, BUILD, save, readSave, IMPL, trac, runAudit, net, MODELS, lineSim, fieldSim, buildFieldMeshes, tr, camera, controls, wind, solar, tank, pump, drone, grid, gsim, field, props, chassis, vehicle, select, openInspect, frame, render, setTab: (t) => $('tab-' + t).click(), doAction, setHour: (h) => { hour = h; updateEnv(); }, setWind: (w) => { windBase = w; }, setWeather: (w) => { weather = w; }, setSpeed: (s) => { speed = s; }, step: (secs, sp) => { const s0 = speed; speed = sp || 1; for (let i = 0; i < secs * 30; i++) frame(1 / 30); speed = s0; }, drive, setDriving, gfx };
+window.__fw = { custom, DS, bay, wsRebuildBuilt, wsRefreshDraft, ws: () => ({ wsBuilt, wsDraft, wsLink }), digester, steward, logic, rov, stw, dgm, lc, diagnose, setSoil: (m) => document.querySelector(`[data-soil="${m}"]`).click(), tractorSim, chain, placed, startBuild, moveGhost, confirmBuild, BUILD, save, readSave, IMPL, trac, runAudit, net, MODELS, lineSim, fieldSim, buildFieldMeshes, tr, camera, controls, wind, solar, tank, pump, drone, grid, gsim, field, props, chassis, vehicle, select, openInspect, frame, render, setTab: (t) => $('tab-' + t).click(), doAction, setHour: (h) => { hour = h; updateEnv(); }, setWind: (w) => { windBase = w; }, setWeather: (w) => { weather = w; }, setSpeed: (s) => { speed = s; }, step: (secs, sp) => { const s0 = speed; speed = sp || 1; for (let i = 0; i < secs * 30; i++) frame(1 / 30); speed = s0; }, drive, setDriving, gfx };
 const clock = new THREE.Clock();
 function loop() {
   const dt = Math.min(clock.getDelta(), 0.05);

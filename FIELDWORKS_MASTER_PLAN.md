@@ -44,7 +44,11 @@ This stage builds one loop that runs through the whole farm, instead of many dis
 | 14, 15. Diagnostics and screens | A Diagnose tab on every machine: unconnected ports, power (and which breaker or rule cut it), faults, wear and process problems, each with a fix. A yard-wide diagnostics view. Live screens on the digester, steward, rover and controller. | `yard.html` |
 | 16. Quality control | All new models pass the validator: 0 errors, 0 warnings. | `validate.js` |
 
-Still to build from the 100x prompt, in order of value: the modular machine designer (section 3), production recipes and multi-stage cores (2B, 2D, 8), mechanical and hydraulic power types (4, 9), fluid pressure and flow (11), logistics routes and forklifts (12), blueprints, milestones and environmental footprint (14), and crop research (6).
+| 3. Modular machine designer (step 1) | A workshop bay where you build a machine from parts on 8 mounts: frame, drive, transmission, process module, input, output, control and cooling. The check works like an engineer would: no drive means nothing turns, a shaft shears under a press, a belt slips under heavy loads, a weak drive runs slow or stalls, a diesel without a radiator overheats, a light frame cannot carry a press. Running speed, power, temperature, cost and margin come from the parts. You get a blueprint preview, then build it as a real machine wired to the workshop pedestal. It draws supply, heats up, throttles or trips, and fills a pallet that sells. Up to 8 designs can be saved. All 36 test combinations of the parts pass the validator. | `designer.js`, `yard.html` |
+
+Layout: the tractor's implements park with the long trailer farthest from the line, the digester stands clear of the sorter, and buried cables and pipes show only where they rise out of the ground. Towed implements now straighten by distance reversed and park square at any game speed.
+
+Still to build from the 100x prompt, in order of value: production recipes and multi-stage cores (2B, 2D, 8), mechanical and hydraulic power types (4, 9), fluid pressure and flow (11), logistics routes and forklifts (12), blueprints, milestones and environmental footprint (14), and crop research (6).
 
 ## Stage 2: needs the real project (PC connected)
 1. Inspect the real game: engine, chunk terrain, save format, building system, vehicles, existing assets.

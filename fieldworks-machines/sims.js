@@ -624,8 +624,8 @@ export class TractorSim extends Unit {
     if (this.state !== 'parked') return false;
     const L = this.L, imp = { plow: 'plow', seed: 'seeder', harvest: 'harvester' }[job], F = field.F, R = [];
     const slot = L.slots[imp];
-    if (this.implement && this.implement !== imp) { const s0 = L.slots[this.implement]; R.push({ x: s0.x + 3.6, z: s0.z, face: Math.PI / 2, label: `Returning the ${this.implement}` }, { x: s0.x + L.hitchBack, z: s0.z, reverse: true, label: `Parking the ${this.implement}` }, { detach: true }); }
-    if (this.implement !== imp) { R.push({ x: slot.x + 3.6, z: slot.z, face: Math.PI / 2, label: `Going to the ${imp}` }, { x: slot.x + L.hitchBack, z: slot.z, reverse: true, label: `Backing up to the ${imp}` }, { attach: imp }); }
+    if (this.implement && this.implement !== imp) { const s0 = L.slots[this.implement]; R.push({ x: s0.x + 4.6, z: s0.z, face: Math.PI / 2, label: `Returning the ${this.implement}` }, { x: s0.x + L.hitchBack, z: s0.z, reverse: true, label: `Parking the ${this.implement}` }, { detach: true }); }
+    if (this.implement !== imp) { R.push({ x: slot.x + 4.6, z: slot.z, face: Math.PI / 2, label: `Going to the ${imp}` }, { x: slot.x + L.hitchBack, z: slot.z, reverse: true, label: `Backing up to the ${imp}` }, { attach: imp }); }
     R.push({ x: L.gate.x + 1.2, z: L.gate.z, label: 'Entering the field' });
     const lanes = Math.round((F.z1 - F.z0) / TRACTOR_DEF.width);
     for (let i = 0; i < lanes; i++) {
@@ -633,12 +633,12 @@ export class TractorSim extends Unit {
       R.push({ x: a, z, label: `Lane ${i + 1} of ${lanes}`, tool: false }, { x: b, z, work: job, label: `${{ plow: 'Plowing', seed: 'Sowing', harvest: 'Harvesting' }[job]} lane ${i + 1} of ${lanes}` });
     }
     R.push({ x: F.x0 + 0.6, z: L.gate.z, label: 'Leaving the field' }, { x: L.gate.x - 1.0, z: L.gate.z, label: 'Leaving the field' });
-    const park = (name, label) => { const sl = L.slots[name]; R.push({ x: sl.x + 3.6, z: sl.z, face: Math.PI / 2, label: label || `Returning the ${name}` }, { x: sl.x + L.hitchBack, z: sl.z, reverse: true, label: `Parking the ${name}` }, { detach: true }); };
+    const park = (name, label) => { const sl = L.slots[name]; R.push({ x: sl.x + 4.6, z: sl.z, face: Math.PI / 2, label: label || `Returning the ${name}` }, { x: sl.x + L.hitchBack, z: sl.z, reverse: true, label: `Parking the ${name}` }, { detach: true }); };
     if (job === 'harvest') {
       // harvester -> parked beside the trailer -> auger the crop across -> haul the trailer to the hopper and tip it
       park('harvester'); R.push({ transfer: true, label: 'Augering the harvest into the trailer' });
       const ts = L.slots.trailer;
-      R.push({ x: ts.x + 3.6, z: ts.z, face: Math.PI / 2, label: 'Going to the trailer' }, { x: ts.x + L.hitchBack, z: ts.z, reverse: true, label: 'Backing up to the trailer' }, { attach: 'trailer' });
+      R.push({ x: ts.x + 4.6, z: ts.z, face: Math.PI / 2, label: 'Going to the trailer' }, { x: ts.x + L.hitchBack, z: ts.z, reverse: true, label: 'Backing up to the trailer' }, { attach: 'trailer' });
       L.haul.forEach((p, i) => R.push({ x: p.x, z: p.z, label: 'Hauling to the hopper' }));
       R.push({ tip: true, label: 'Tipping into the hopper' });
       park('trailer', 'Taking the trailer back');
