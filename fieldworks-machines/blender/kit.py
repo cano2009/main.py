@@ -153,3 +153,44 @@ def preview(path, cam_loc=(5, -5, 4), target=(0, 0, 0.6), size=(1000, 800), lens
 def args():
     a = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
     return (a[0] if a else None), (a[1] if len(a) > 1 else None)
+
+def vault(r_out, thick, length, loc, m, segs=16, name='vault', angle=math.pi, start=None):
+    """Half-barrel shell (an arch extruded along x): r_out outer radius, opening downward onto loc's z."""
+    bm = bmesh.new(); ri = r_out - thick; prof = []
+    a0 = (math.pi - angle) / 2 if start is None else start
+    for i in range(segs + 1):
+        a = a0 + i / segs * angle; prof.append((math.cos(a), math.sin(a)))
+    rings = []
+    for x in (-length / 2, length / 2):
+        outer = [bm.verts.new((x, c * r_out, s * r_out)) for c, s in prof]
+        inner = [bm.verts.new((x, c * ri, s * ri)) for c, s in prof]
+        rings.append((outer, inner))
+    (o0, i0), (o1, i1) = rings
+    for k in range(segs):
+        bm.faces.new((o0[k], o0[k + 1], o1[k + 1], o1[k])); bm.faces.new((i0[k + 1], i0[k], i1[k], i1[k + 1]))
+        bm.faces.new((o0[k + 1], o0[k], i0[k], i0[k + 1])); bm.faces.new((o1[k], o1[k + 1], i1[k + 1], i1[k]))
+    for o, i in ((o0, i0), (o1, i1)):
+        for k in (0, segs):
+            pass
+    bm.faces.new((o0[0], i0[0], i1[0], o1[0])); bm.faces.new((o1[segs], i1[segs], i0[segs], o0[segs]))
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    me = bpy.data.meshes.new(name); bm.to_mesh(me); bm.free()
+    o = bpy.data.objects.new(name, me); bpy.context.collection.objects.link(o); o.location = loc
+    _finish(o, m, 0.012)
+    for p in o.data.polygons:
+        if abs(p.normal.x) < 0.5: p.use_smooth = True
+    return o
+
+def ring(r, tube, loc, m, axis='X', name='ring', segs=24, arc=None):
+    """Torus (or a partial hoop when arc is given in radians, opening downward)."""
+    if arc:
+        pts = []; a0 = (math.pi - arc) / 2
+        for i in range(segs + 1):
+            a = a0 + i / segs * arc; pts.append((0, math.cos(a) * r, math.sin(a) * r))
+        o = pipe([(loc[0] + p[0], loc[1] + p[1], loc[2] + p[2]) for p in pts], tube, m, name, bend=0)
+        return o
+    bpy.ops.mesh.primitive_torus_add(major_radius=r, minor_radius=tube, major_segments=segs, minor_segments=8, location=loc,
+                                     rotation={'X': (0, math.pi / 2, 0), 'Y': (math.pi / 2, 0, 0), 'Z': (0, 0, 0)}[axis])
+    o = bpy.context.object; o.name = name; o.data.materials.append(mat(m) if isinstance(m, str) else m)
+    for p in o.data.polygons: p.use_smooth = True
+    return o

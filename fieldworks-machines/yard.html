@@ -347,7 +347,7 @@ const field = fieldSim;
 // ---------- processing line (washer, cutter and sorter, packer) ----------
 const lineG = new THREE.Group(); lineG.position.set(0, 0, LZ); scene.add(lineG);
 const belt = LN.conveyor(LX0, 0.2); lineG.add(belt.root);
-const wsh = LN.washer(); lineG.add(wsh.root); wsh.ledAt = new V(-0.02, 1.2, 0.73);   // status lamp on the wash tunnel's control box (Blender model)
+const wsh = LN.washer(); lineG.add(wsh.root); wsh.ledAt = new V(0.55, 1.52, -0.08);   // status lamp on the hoop washer's blower housing (Blender model)
 const cut = LN.cutter(); lineG.add(cut.root);
 const pak = LN.packer(); lineG.add(pak.root);
 { const Z = LINE_DEF.zones; wsh.root.position.x = LX0 - Z.wash; cut.root.position.x = LX0 - Z.cut; pak.root.position.x = LX0 - Z.pack - 0.1; }
@@ -1332,9 +1332,9 @@ const gCut = glow.attach(cut.root, { state: 'running' }); gCut.stackLight({ posi
 const gPak = glow.attach(pak.root, { state: 'running' }); gPak.stackLight({ position: pak.ledAt, radius: 0.035, segment: 0.07 });
 for (let i = 0; i < 8; i++) { const m = new THREE.Mesh(itemGeo('radish', true), itemMat('radish')); m.castShadow = true; m.position.set(LX0 + 0.75 + ((i % 3) - 1) * 0.22, 1.02, LZ + (Math.floor(i / 3) - 1) * 0.22); m.rotation.y = i * 1.3; m.visible = false; scene.add(m); binPile.push(m); }
 let gearSpin = 0;
-// Blender models: the wash tunnel replaces the drum washer's visible meshes (ports, glow and picking stay)
+// Blender models: the hoop washer replaces the drum washer's visible meshes (ports, glow and picking stay)
 let washParts = null;
-MD.swap(wsh.root, 'models/wash_tunnel.glb').then((r) => { if (r) { washParts = r.parts; envMats = null; } });
+MD.swap(wsh.root, 'models/hoop_washer.glb').then((r) => { if (r) { washParts = r.parts; envMats = null; } });
 function animateLine(dt) {
   const run = lineSim.running(), v = run ? lineSim.level.beltSpeed * lineSim.efficiency() * speed : 0;
   belt.move(v * dt);
@@ -1354,7 +1354,7 @@ function animateLine(dt) {
   pal.show(lineSim.boxes);
   if (lineSim.pushT > 0) lineSim.pushT = Math.max(0, lineSim.pushT - dt); cut.pusher.position.z = -0.42 + Math.sin(Math.PI * Math.min(1, (0.6 - (lineSim.pushT || 0)) / 0.6)) * ((lineSim.pushT || 0) > 0 ? 0.55 : 0);
   wsh.tanks.forEach((w) => { w.scale.y = Math.max(0.03, tank.frac()); });
-  if (washParts) ['water0', 'water1'].forEach((n) => { const w = washParts[n]; if (w) w.scale.y = Math.max(0.05, tank.frac()); });
+  if (washParts) { const w = washParts.water0; if (w) w.scale.y = Math.max(0.05, tank.frac()); if (washParts.brush) washParts.brush.rotation.z -= v * dt * 9; if (washParts.fan) washParts.fan.rotation.z += (run ? 30 : 0) * dt; }
   gearSpin += v * dt * 6; cut.gears.forEach((g, i) => { g.g.rotation.z = (i ? -1 : 1) * gearSpin * (0.09 / g.r); });
   cut.heat.forEach((h) => { h.material.emissiveIntensity = run ? 3 : 0.1; });
   const st = lineSim.status(); [gWsh, gCut, gPak].forEach((g) => g.setState(st));
