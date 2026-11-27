@@ -9,6 +9,7 @@ const V = THREE.Vector3;
 const lin = (h) => new THREE.Color(h).convertSRGBToLinear();
 const mats = new Map();
 function mat(hex, o) { const k = hex + JSON.stringify(o || {}); if (!mats.has(k)) { const m = new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.7, metalness: 0.05, flatShading: true }, o || {})); m.color = lin(hex); m.userData.lowpoly = true; mats.set(k, m); } return mats.get(k); }
+export const lin2 = lin;
 export const T = {
   green: mat('#3f7d4c'), greenD: mat('#2f5a3b'), yellow: mat('#e9b830'), dark: mat('#33363a'), steel: mat('#9aa1a6', { metalness: 0.3, roughness: 0.5 }),
   tire: mat('#232427', { roughness: 0.95 }), red: mat('#c94232'), black: mat('#1a1b1d'), seat: mat('#2b2d30'),
@@ -125,7 +126,7 @@ export function seeder() {
     units.push(u);
   }
   // fold-up row markers
-  [-1, 1].forEach((s) => { strut(root, new V(s * 1.05, 0.12, -0.62), new V(s * 1.5, 0.7, -0.62), 0.05, T.yellow); cylX(0.12, 0.03, 8, T.steel, s * 1.52, 0.72, -0.62, root); });
+  [-1, 1].forEach((s) => { strut(root, new V(s * 1.0, 0.12, -0.62), new V(s * 1.08, 0.95, -0.62), 0.05, T.yellow); cylX(0.12, 0.03, 8, T.steel, s * 1.1, 0.97, -0.62, root); });   // row markers folded up for transport
   bake(root, []);
   return { root, wheels: [], units, liftDown: 0.0, liftUp: 0.25 };
 }
@@ -135,8 +136,8 @@ export function harvester() {
   strut(root, new V(0, 0, -0.03), new V(0.0, 0.35, -1.0), 0.1, T.dark);
   box(0.9, 0.08, 0.08, T.dark, 0, 0, -0.03, root); box(0.08, 0.5, 0.08, T.dark, 0, 0.25, -0.03, root);
   box(1.4, 0.12, 2.0, T.dark, 0.0, 0.35, -1.9, root);
-  box(2.0, 0.1, 0.1, T.dark, 0, 0.05, -2.1, root); box(0.3, 0.3, 0.1, T.dark, 0, 0.2, -2.1, root);   // axle under the chassis
-  const wheels = [-1, 1].map((s) => { const w = wheel(0.5, 0.3, 12); w.position.set(s * 0.95, 0.05, -2.1); root.add(w); return w; });
+  box(2.0, 0.1, 0.1, T.dark, 0, -0.05, -2.1, root); box(0.3, 0.42, 0.1, T.dark, 0, 0.13, -2.1, root);   // axle under the chassis
+  const wheels = [-1, 1].map((s) => { const w = wheel(0.5, 0.3, 12); w.position.set(s * 0.95, -0.05, -2.1); root.add(w); return w; });
   // pickup header with a turning reel, offset to the right so it runs beside the tractor track
   const head = new THREE.Group(); head.position.set(0, -0.25, -1.0); root.add(head);
   box(2.1, 0.3, 0.6, T.yellow, 0, 0.0, 0, head); box(2.1, 0.06, 0.5, T.dark, 0, -0.16, 0.12, head);
@@ -153,5 +154,46 @@ export function harvester() {
   box(1.46, 0.25, 0.06, T.greenD, 0, 1.52, -1.27, root); box(1.46, 0.25, 0.06, T.greenD, 0, 1.52, -2.83, root);
   const fill = box(1.36, 0.6, 1.44, mat('#c9a43a'), 0, 1.1, -2.05, root); fill.geometry.translate(0, 0.3, 0); fill.position.y = 1.0; fill.userData.noOutline = true;
   bake(root, [reel, fill, ...wheels]); bake(head, [reel]);
-  return { root, wheels, reel, fill, liftDown: 0.0, liftUp: 0.2 };
+  return { root, wheels, reel, fill, liftDown: 0.0, liftUp: 0.2, towed: true, axleBack: 2.1 };
+}
+
+/** Tipping trailer: drawbar with a hitch eye at the origin, tandem axle, red bed that tips about its rear edge on a
+ *  hydraulic ram, mudguards and tail lights. bed.rotation.x < 0 tips it; load is the crop heap inside. */
+export function trailer() {
+  const root = new THREE.Group(); root.name = 'Trailer'; root.userData.pick = 'tractor';
+  const RED = mat('#b5413a'), L0 = -1.0, L1 = -4.5, Y = 0.15;   // bed from z L0 to L1, chassis top at y Y (hitch at 0.55 m)
+  // drawbar: A-frame from the hitch eye back to the chassis
+  cylZ(0.07, 0.06, 10, T.dark, 0, 0, -0.02, root);
+  [-1, 1].forEach((s) => strut(root, new V(0, 0, -0.05), new V(s * 0.55, Y - 0.05, L0 + 0.1), 0.09, T.dark));
+  box(0.08, 0.25, 0.08, T.dark, 0, -0.15, -0.6, root);                                  // parking stand
+  // chassis rails and cross members
+  [-0.55, 0.55].forEach((x) => box(0.12, 0.16, L0 + 0.2 - L1, T.dark, x, Y - 0.08, (L0 + 0.2 + L1) / 2, root));   // rails run under the front cross member
+  [L0 + 0.1, -2.2, -3.4, L1 + 0.1].forEach((z) => box(1.22, 0.1, 0.1, T.dark, 0, Y - 0.08, z, root));
+  // tandem axle and wheels (wheel bottoms at y = -0.55)
+  const wheels = [];
+  [-2.75, -3.6].forEach((z) => { box(2.1, 0.09, 0.09, T.dark, 0, -0.13, z, root); [-1, 1].forEach((s) => { const w = wheel(0.42, 0.28, 12); w.position.set(s * 1.02, -0.13, z); root.add(w); wheels.push(w); }); });
+  [-1, 1].forEach((s) => { box(0.32, 0.04, 1.5, T.dark, s * 1.02, 0.33, -3.18, root); box(0.1, 0.42, 0.1, T.dark, s * 0.75, 0.12, -3.18, root); });
+  // tipping bed, hinged at the rear
+  const bed = new THREE.Group(); bed.position.set(0, Y, L1 + 0.05); root.add(bed);
+  const bl = L0 - L1 - 0.05;
+  box(1.9, 0.08, bl, T.dark, 0, 0.04, bl / 2, bed);
+  [-1, 1].forEach((s) => { box(0.06, 0.62, bl, RED, s * 0.94, 0.39, bl / 2, bed); box(0.08, 0.06, bl + 0.04, T.green, s * 0.94, 0.72, bl / 2, bed); for (let k = 0; k < 5; k++) box(0.08, 0.6, 0.06, mat('#9a3530'), s * 0.98, 0.39, 0.2 + k * (bl - 0.4) / 4, bed); });
+  box(1.9, 0.82, 0.06, RED, 0, 0.49, bl, bed); box(1.94, 0.06, 0.1, T.green, 0, 0.92, bl, bed);   // front wall (taller)
+  box(1.86, 0.6, 0.06, RED, 0, 0.38, 0.03, bed);                                                    // tailgate
+  const load = box(1.8, 0.5, bl - 0.12, mat('#c9a43a'), 0, 0.08, bl / 2, bed); load.geometry.translate(0, 0.25, 0); load.position.y = 0.08; load.userData.noOutline = true;
+  box(0.12, 0.08, 0.06, mat('#ff3b2b', { emissive: lin('#ff3b2b'), emissiveIntensity: 0.4 }), 0.75, 0.15, -0.02, bed); box(0.12, 0.08, 0.06, mat('#ff3b2b', { emissive: lin('#ff3b2b'), emissiveIntensity: 0.4 }), -0.75, 0.15, -0.02, bed);
+  [-0.5, 0.5].forEach((x) => cylX(0.05, 0.12, 8, T.steel, x, 0.0, 0.0, bed));                     // hinge pins
+  // hydraulic ram from the chassis to the bed front (stretches as the bed tips)
+  const ram = cyl(0.05, 1, 8, T.steel, 0, 0, 0, root); ram.userData.noOutline = true;
+  const ramBase = new V(0, Y, L0 - 0.35), ramTop = new V(0, 0.08, bl - 0.25);
+  bake(root, [bed, ram, ...wheels]); bake(bed, [load]);
+  const tmp = new V(), q = new THREE.Quaternion();
+  return {
+    root, bed, load, wheels, towed: true, axleBack: 3.18, liftUp: 0,
+    set(tip, fill) {
+      bed.rotation.x = -tip * 0.85; load.visible = fill > 0.01; load.scale.y = Math.max(0.02, fill);
+      bed.updateMatrix(); tmp.copy(ramTop).applyMatrix4(bed.matrix);
+      const d = tmp.clone().sub(ramBase); ram.position.copy(ramBase).addScaledVector(d, 0.5); ram.scale.y = d.length(); q.setFromUnitVectors(new V(0, 1, 0), d.normalize()); ram.quaternion.copy(q);
+    }
+  };
 }

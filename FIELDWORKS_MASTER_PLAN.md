@@ -22,8 +22,8 @@ Before integrating, step 1 of the prompt still has to happen: inspect the real p
 
 | Prompt section | What exists now |
 |---|---|
-| 6. Crops | 14 crops with the full 7-stage cycle (seed to harvested), plus harvested items. Soil states for plowing and sowing. |
-| 7. Machinery | Tractor with plow, seeder and harvester. Implements couple through hitch ports, and the tractor really plows, sows and harvests. |
+| 6. Crops | 19 soft-shaded crops with the full 7-stage cycle and two levels of detail, plus harvested items. Soil states for plowing and sowing. |
+| 7, 11. Machinery and transport | Tractor with plow, seeder, harvester and a tipping trailer. Implements couple through hitch ports; towed ones articulate behind the drawbar. The harvest is augered into the trailer, hauled and tipped into the hopper. |
 | 8. Production chain | Wheat to flour to bread to crates, and corn to cornmeal, fed by the sorter and sold as pallets. |
 | 12. Buildings | Barn, warehouse and greenhouse: complete models with snapping placement, rotation, blocked-placement reasons, colliders and removal. |
 | 20. Saving | Autosave with a backup copy and validation on load. |
@@ -37,6 +37,6 @@ Before integrating, step 1 of the prompt still has to happen: inspect the real p
 
 ## Later stages (not started)
 - More production chains: wood to furniture, ore to parts, milk to cheese (section 8). These need animals, a forest and mining first.
-- Trailers, and a player-driven tractor using the truck's suspension (sections 7 and 11).
+- A player-driven tractor using the truck's suspension (sections 7 and 11).
 - Biomes, rivers, towns and roads in the infinite world (section 13).
 - Multiplayer authority, anti-cheat, moderation and the staff application system: these need the game's server design first (sections 18 and 19).

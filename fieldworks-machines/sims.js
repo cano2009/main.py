@@ -473,7 +473,12 @@ export const CROPS = {
   sunflower: { name: 'Sunflower', growHours: 6.5, value: 2.2, plantsPerItem: 1, density: 0.25 },
   soybean:   { name: 'Soybean',   growHours: 5,   value: 1.3, plantsPerItem: 3, density: 0.5 },
   berry:     { name: 'Strawberry', growHours: 4,  value: 2.4, plantsPerItem: 2, density: 0.5 },
-  pumpkin:   { name: 'Pumpkin',   growHours: 8,   value: 8.0, plantsPerItem: 1, density: 0.25 }
+  pumpkin:   { name: 'Pumpkin',   growHours: 8,   value: 8.0, plantsPerItem: 1, density: 0.25 },
+  eggplant:  { name: 'Eggplant',  growHours: 5.5, value: 2.0, plantsPerItem: 2, density: 0.5 },
+  pepper:    { name: 'Chilli pepper', growHours: 5, value: 1.8, plantsPerItem: 3, density: 0.5 },
+  grape:     { name: 'Grape',     growHours: 7,   value: 3.0, plantsPerItem: 2, density: 0.25 },
+  garlic:    { name: 'Garlic',    growHours: 4.5, value: 1.1, plantsPerItem: 4, density: 1 },
+  beet:      { name: 'Beetroot',  growHours: 4.5, value: 1.2, plantsPerItem: 3, density: 0.5 }
 };
 // Plant states: 'growing' (g 0..1, stages by g), 'stubble' (harvested), 'tilled' (plowed, ready to seed).
 export class FieldSim {
@@ -563,14 +568,14 @@ export const TRACTOR_DEF = {
     { level: 2, speed: 3.8, hp: 150, cost: 7000, parts: ['Turbocharger', 'Wider tyres'] },
     { level: 3, speed: 4.6, hp: 200, cost: 14000, parts: ['200 hp engine', 'GPS auto-steer'] }
   ],
-  fuelL: 180, workLph: 14, driveLph: 6, binCap: 260, unloadPerS: 12, wearPerHour: 2, repairCostPerPct: 20, fuelPrice: 1.6, width: 2.0, toolOffset: 2.6
+  fuelL: 180, workLph: 14, driveLph: 6, binCap: 260, cartCap: 600, augerPerS: 25, unloadPerS: 15, wearPerHour: 2, repairCostPerPct: 20, fuelPrice: 1.6, width: 2.0, toolOffset: 2.6
 };
 export class TractorSim extends Unit {
   constructor(layout) {
     super(TRACTOR_DEF);
     this.L = layout; this.fuel = TRACTOR_DEF.fuelL * 0.8;
     this.pos = { x: layout.park.x, z: layout.park.z }; this.heading = layout.park.heading; this.vel = 0;
-    this.implement = null; this.state = 'parked'; this.job = null; this.route = []; this.bin = 0; this.worked = 0; this.wheelRot = 0; this.toolDown = false;
+    this.implement = null; this.state = 'parked'; this.job = null; this.route = []; this.bin = 0; this.cart = 0; this.tip = 0; this.tipPhase = 0; this.augering = false; this.worked = 0; this.wheelRot = 0; this.toolDown = false;
   }
   status() { if (!this.on) return 'off'; if (this.fault) return 'stopped'; if (this.fuel <= 0) return 'stopped'; return this.state === 'parked' ? 'waiting' : 'running'; }
   reason() {
@@ -592,8 +597,17 @@ export class TractorSim extends Unit {
       R.push({ x: a, z, label: `Lane ${i + 1} of ${lanes}`, tool: false }, { x: b, z, work: job, label: `${{ plow: 'Plowing', seed: 'Sowing', harvest: 'Harvesting' }[job]} lane ${i + 1} of ${lanes}` });
     }
     R.push({ x: F.x0 + 0.6, z: L.gate.z, label: 'Leaving the field' }, { x: L.gate.x - 1.0, z: L.gate.z, label: 'Leaving the field' });
-    if (job === 'harvest') R.push({ x: L.unload.x, z: L.unload.z, label: 'Driving to the hopper' }, { unload: true, label: 'Unloading into the hopper' });
-    R.push({ x: slot.x + 3.6, z: slot.z, face: Math.PI / 2, label: `Returning the ${imp}` }, { x: slot.x + L.hitchBack, z: slot.z, reverse: true, label: `Parking the ${imp}` }, { detach: true }, { x: slot.x + 3.9, z: slot.z, label: "Parking" }, { park: true });
+    const park = (name, label) => { const sl = L.slots[name]; R.push({ x: sl.x + 3.6, z: sl.z, face: Math.PI / 2, label: label || `Returning the ${name}` }, { x: sl.x + L.hitchBack, z: sl.z, reverse: true, label: `Parking the ${name}` }, { detach: true }); };
+    if (job === 'harvest') {
+      // harvester -> parked beside the trailer -> auger the crop across -> haul the trailer to the hopper and tip it
+      park('harvester'); R.push({ transfer: true, label: 'Augering the harvest into the trailer' });
+      const ts = L.slots.trailer;
+      R.push({ x: ts.x + 3.6, z: ts.z, face: Math.PI / 2, label: 'Going to the trailer' }, { x: ts.x + L.hitchBack, z: ts.z, reverse: true, label: 'Backing up to the trailer' }, { attach: 'trailer' });
+      L.haul.forEach((p, i) => R.push({ x: p.x, z: p.z, label: 'Hauling to the hopper' }));
+      R.push({ tip: true, label: 'Tipping into the hopper' });
+      park('trailer', 'Taking the trailer back');
+    } else park(imp);
+    R.push({ park: true });
     this.route = R; this.job = job; this.state = 'driving'; this.worked = 0; this.note(`Job started: ${job}`);
     return true;
   }
@@ -606,6 +620,16 @@ export class TractorSim extends Unit {
     if (step.attach) { this.implement = step.attach; cb.attach(step.attach); this.note(`Hitched the ${step.attach}`); this.route.shift(); return; }
     if (step.detach) { cb.detach(this.implement); this.note(`Unhitched the ${this.implement}`); this.implement = null; this.route.shift(); return; }
     if (step.park) { this.state = 'parked'; this.job = null; this.route.shift(); this.note('Job finished'); return; }
+    if (step.transfer) {   // harvester bin -> trailer by auger
+      this.augering = this.bin > 0; const n = Math.min(this.bin, Math.ceil(D.augerPerS * dt)); this.bin -= n; this.cart = Math.min(D.cartCap, this.cart + n); this.vel = 0;
+      if (this.bin <= 0) { this.augering = false; this.route.shift(); this.note(`Trailer loaded: ${this.cart} items`); } return;
+    }
+    if (step.tip) {        // raise the bed, empty it into the hopper, lower it again
+      this.vel = 0;
+      if (this.tipPhase === 0) { this.tip = Math.min(1, this.tip + dt / 2.5); if (this.tip >= 1) this.tipPhase = 1; return; }
+      if (this.tipPhase === 1) { const n = Math.min(this.cart, Math.ceil(D.unloadPerS * dt)), took = cb.unload(n); this.cart -= took; step.wait = took ? 0 : (step.wait || 0) + dt; if (this.cart <= 0 || step.wait > 8) { this.tipPhase = 2; if (this.cart > 0) this.note('Hopper full: kept the rest in the trailer'); } return; }
+      this.tip = Math.max(0, this.tip - dt / 2); if (this.tip <= 0) { this.tipPhase = 0; this.route.shift(); this.note('Trailer emptied into the hopper'); } return;
+    }
     if (step.unload) { const n = Math.min(this.bin, Math.ceil(D.unloadPerS * dt)); const took = cb.unload(n); this.bin -= took; this.vel = 0; if (this.bin <= 0 || took === 0 && n > 0 && this.bin > 0 && (step.wait = (step.wait || 0) + dt) > 8) this.route.shift(); return; }
     const sp = this.level.speed * this.efficiency() * (step.reverse ? 0.45 : step.work ? 1 : 1.4);
     const dx = step.x - this.pos.x, dz = step.z - this.pos.z, d = Math.hypot(dx, dz), mv = Math.min(d, sp * dt);
@@ -642,13 +666,13 @@ export class TractorSim extends Unit {
     const L = this.level, D = this.def;
     return Object.assign(this.head(), {
       tabs: {
-        overview: [['Type', D.type], ['Status', this.reason()], ['Implement', this.implement || 'None'], ['Job', this.job || 'None'], ['Fuel', `${this.fuel.toFixed(1)} of ${D.fuelL} L`], ['Harvest bin', `${this.bin} of ${D.binCap} items`], ['Level', `${L.level} of ${D.levels.length}`]],
+        overview: [['Type', D.type], ['Status', this.reason()], ['Implement', this.implement || 'None'], ['Job', this.job || 'None'], ['Fuel', `${this.fuel.toFixed(1)} of ${D.fuelL} L`], ['Harvest bin', `${this.bin} of ${D.binCap} items`], ['Trailer load', `${this.cart} of ${D.cartCap} items`], ['Level', `${L.level} of ${D.levels.length}`]],
         performance: [['Engine', L.hp + ' hp'], ['Speed', Math.abs(this.vel).toFixed(1) + ' m/s'], ['Working width', D.width + ' m'], ['Distance worked', Math.round(this.worked) + ' m'], ['Fuel use', (this.toolDown ? D.workLph : this.vel ? D.driveLph : 0) + ' L/h'], ['Efficiency', Math.round(this.efficiency() * 100) + '%'], ['Hours', this.hours.toFixed(2) + ' h']],
-        resources: [['Fuel', 'Diesel'], ['Refuel cost', money(this.refuelCost())], ['Hitch', 'Three-point, category 2'], ['Implements', 'Plow, seeder, harvester']],
+        resources: [['Fuel', 'Diesel'], ['Refuel cost', money(this.refuelCost())], ['Hitch', 'Three-point, category 2'], ['Implements', 'Plow, seeder, harvester, tipping trailer']],
         upgrades: this.upgradeTab((a, b) => [`Engine ${a.hp} -> ${b.hp} hp`, `Working speed ${a.speed} -> ${b.speed} m/s`]),
         operation: { rows: [['Current step', this.reason()], ['Steps left', this.route.length], ['Fault', this.fault ? this.fault.text : 'None'], ['Maintenance', this.maint()]], log: this.log.slice(0, 6) }
       },
-      strip: [{ k: 'Fuel', v: Math.round(this.fuel) + ' L', f: this.fuel / D.fuelL, c: 'var(--accent)' }, { k: 'Speed', v: Math.abs(this.vel).toFixed(1) + ' m/s' }, { k: 'Implement', v: this.implement || '–' }, { k: 'Bin', v: this.bin, f: this.bin / D.binCap }, { k: 'Job', v: this.job || '–' }, this.condStat()],
+      strip: [{ k: 'Fuel', v: Math.round(this.fuel) + ' L', f: this.fuel / D.fuelL, c: 'var(--accent)' }, { k: 'Speed', v: Math.abs(this.vel).toFixed(1) + ' m/s' }, { k: 'Implement', v: this.implement || '–' }, { k: 'Bin', v: this.bin, f: this.bin / D.binCap }, { k: 'Trailer', v: this.cart, f: this.cart / D.cartCap }, { k: 'Job', v: this.job || '–' }, this.condStat()],
       actions: [{ id: 'plow', label: 'Plow', disabled: this.state !== 'parked' }, { id: 'seed', label: 'Sow', disabled: this.state !== 'parked' }, { id: 'harvest', label: 'Harvest', disabled: this.state !== 'parked' }, { id: 'refuel', label: `Refuel ${money(this.refuelCost())}` }, ...standardActions(this).slice(1)]
     });
   }

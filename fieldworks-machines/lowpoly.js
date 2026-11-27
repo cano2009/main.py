@@ -46,7 +46,9 @@ function outlineMaterial(th, color) {
     sh.vertexShader = 'uniform float uTh;\n' + sh.vertexShader.replace('#include <begin_vertex>', `#include <begin_vertex>
   float lpD = -(modelViewMatrix * vec4(position, 1.0)).z;
   float lpS = length(modelMatrix[0].xyz);
-  transformed += normalize(normal) * max(uTh, lpD * 0.0015 / max(lpS, 1e-3));`);
+  transformed += normalize(normal) * max(uTh, lpD * 0.0012 / max(lpS, 1e-3));
+  // far away the ink lines turn small objects into dark noise: the whole object drops its outline (decided once per object)
+  if (-(viewMatrix * vec4(modelMatrix[3].xyz, 1.0)).z > 36.0) transformed = vec3(0.0);`);
   };
   m.customProgramCacheKey = () => 'lpoutline';
   m.userData.outline = true;
