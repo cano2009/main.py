@@ -137,11 +137,32 @@ def join(objs, name, parent=None):
     if parent: o.parent = parent
     return o
 
+def bake_ao(distance=0.28, samples=24, floor=0.66):
+    """Bake ambient occlusion into vertex colours (Cycles): contact shadows where parts meet, free at run time.
+    Modifiers are applied first so the colours land on the final vertices; values are lifted so AO tints, not blackens."""
+    meshes = [o for o in bpy.context.scene.objects if o.type == 'MESH' and o.data.materials and not any(m and m.blend_method != 'OPAQUE' for m in o.data.materials)]
+    if not meshes: return
+    bpy.ops.object.select_all(action='DESELECT')
+    for o in meshes: o.select_set(True)
+    bpy.context.view_layer.objects.active = meshes[0]
+    bpy.ops.object.convert(target='MESH')                       # applies the bevels
+    for o in meshes:
+        ca = o.data.color_attributes.new('Col', 'BYTE_COLOR', 'CORNER'); o.data.color_attributes.active_color = ca
+    sc = bpy.context.scene; sc.render.engine = 'CYCLES'; sc.cycles.device = 'CPU'; sc.cycles.samples = samples
+    if not sc.world: sc.world = bpy.data.worlds.new('w')
+    sc.world.light_settings.distance = distance
+    bpy.ops.object.bake(type='AO', target='VERTEX_COLORS', use_clear=True, margin=0)
+    for o in meshes:
+        d = o.data.color_attributes['Col'].data
+        for c in d:
+            v = c.color[0]; v = floor + (1 - floor) * v; c.color = (v, v, v, 1.0)
+
 def export(path):
+    if os.environ.get('FW_BAKE', '1') == '1': bake_ao()
     for m in bpy.data.materials:   # closed models: single-sided faces (glass stays double-sided)
         if m.blend_method == 'OPAQUE': m.use_backface_culling = True
     bpy.ops.object.select_all(action='SELECT')
-    bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', export_apply=True, export_yup=True, export_extras=True)
+    bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', export_apply=True, export_yup=True, export_extras=True, export_colors=True)
 
 def preview(path, cam_loc=(5, -5, 4), target=(0, 0, 0.6), size=(1000, 800), lens=50, ortho=None):
     """Clean studio render to check the model (Cycles on the CPU, soft light, grey backdrop)."""
