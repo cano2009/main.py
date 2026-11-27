@@ -581,6 +581,7 @@ function wsRefreshDraft() {
 // ---------- glowing state lights (after stylize) ----------
 const gW = glow.attach(tw.root, { state: 'running' }); gW.led({ position: new V(1.45, 1.5, 1.3), size: 0.04 });
 gW.strip({ from: new V(1.18, 1.62, 1.3), to: new V(1.72, 1.62, 1.3), width: 0.025 });
+tw.aviation.set(0.3, 1.36 + 0.75 + 0.95, -1.25);   // the Blender nacelle's beacon mast (yaw-local)
 const gAv = glow.attach(tw.yaw, { state: 'stopped' }); gAv.led({ position: tw.aviation, size: 0.08 });
 const gS = glow.attach(sa.inverter, { state: 'running' }); gS.led({ position: new V(0.19, 1.42, 0.12), size: 0.02 });
 gS.strip({ from: new V(-0.22, 0.88, 0.115), to: new V(0.22, 0.88, 0.115), width: 0.015 });

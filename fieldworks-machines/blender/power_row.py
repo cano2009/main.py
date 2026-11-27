@@ -116,8 +116,8 @@ def wind_turbine():
     # ---------- tower: lathe with a slight base flare, flange seams, green base bands, top flange
     prof = [(rAt(0) + 0.1, 0.56), (rAt(0) + 0.04, 0.66), (rAt(0), 0.85)] + [(rAt(y), 0.5 + y) for y in (1, 3, 5, 7, 9, 11, 13, H)]
     lathe(prof, (0, 0, 0), W, segs=48, name='tower')
-    for i, (z0, c) in enumerate(((0.66, '#2f6b3c'), (1.25, '#3f8a4f'), (1.85, '#66a865'), (2.45, '#9ccc95'))):
-        h = 0.6 - i * 0.08
+    for i, (z0, c) in enumerate(((2.3, '#d8423a'), (2.62, '#d8423a'))):
+        h = 0.17
         lathe([(rAt(z0 - 0.5) + 0.006, z0), (rAt(z0 + h - 0.5) + 0.006, z0 + h)], (0, 0, 0), c, segs=48)
     for y in (4.6, 9.3): cyl(rAt(y) + 0.02, 0.06, (0, 0, 0.5 + y), W2, verts=48, bevel=0.008)
     cyl(rAt(H) + 0.045, 0.1, (0, 0, YAW - 0.05), W2, verts=48, bevel=0.015)
@@ -135,8 +135,8 @@ def wind_turbine():
     cyl(0.07, 0.03, (0, dy - 0.095, 1.72), '#2d4250', axis='Y', verts=20, bevel=0.0)
     for z in (1.0, 1.75): block((0.05, 0.06, 0.14), (-0.25, dy - 0.07, z), 'steelD', 0.01)
     block((0.04, 0.05, 0.16), (0.18, dy - 0.1, 1.33), 'dark', 0.01)
-    block((0.8, 0.4, 0.05), (0, dy - 0.17, 2.14), 'green', 0.02)                         # door canopy
-    block((0.82, 0.04, 0.09), (0, dy - 0.37, 2.12), 'greenD', 0.01)
+    block((0.8, 0.4, 0.05), (0, dy - 0.17, 2.14), '#d8423a', 0.02)                       # door canopy
+    block((0.82, 0.04, 0.09), (0, dy - 0.37, 2.12), '#a8302a', 0.01)
     for sx in (-1, 1): block((0.05, 0.36, 0.05), (sx * 0.34, dy - 0.15, 2.09), 'steelD', 0.008)   # brackets into the tower
     block((0.14, 0.08, 0.06), (0, dy - 0.06, 2.06), 'dark', 0.01); block((0.1, 0.03, 0.03), (0, dy - 0.1, 2.03), '#fff2c8', 0.005)
     # ---------- steel stair and landing with railings
@@ -171,54 +171,91 @@ def wind_turbine():
     for k in range(5): block((0.04, 0.12, 0.62), G(TX + 0.46, 0.92, TZ - 0.28 + k * 0.14), '#2d5a3a', 0.01)
     block((0.3, 0.02, 0.2), G(TX, 1.05, TZ + 0.37), 'yellow', 0.005)
     pipe([G(TX - 0.3, 0.8, TZ + 0.3), G(1.45, 0.8, 0.9)], 0.03, 'dark', bend=0)
-    # ---------- nacelle (turns with the yaw)
+    # ---------- nacelle (turns with the yaw): faceted body, wrap-around red bands, hoist platform at the back
     yaw = empty('yaw', (0, 0, YAW))
+    RED = '#d8423a'; ZC = YAW + 0.78
+    SEC = [(-0.95, 1.12, 1.18, ZC - 0.02, 0.24), (-0.62, 1.36, 1.5, ZC, 0.15), (1.95, 1.36, 1.5, ZC, 0.15),
+           (2.45, 1.32, 1.26, ZC + 0.1, 0.18), (2.75, 1.18, 0.98, ZC + 0.22, 0.24)]
+    def wid(y):   # body width at y (for bands and parts that hug the sides)
+        for (y0, w0, *_), (y1, w1, *_) in zip(SEC, SEC[1:]):
+            if y0 <= y <= y1: return w0 + (w1 - w0) * (y - y0) / (y1 - y0)
+        return SEC[-1][1]
     def nac():
         cyl(rAt(H) + 0.07, 0.16, (0, 0, YAW + 0.07), 'steelD', verts=48, bevel=0.02)
         for k in range(16):
             a = k / 16 * math.tau; cyl(0.02, 0.05, (math.cos(a) * (rAt(H) + 0.04), math.sin(a) * (rAt(H) + 0.04), YAW + 0.16), 'steel', verts=6, bevel=0)
-        loft([(2.05, 0.5, 0.56, YAW + 0.74, 0.48), (1.85, 0.92, 0.98, YAW + 0.7, 0.4), (1.2, 1.14, 1.16, YAW + 0.66, 0.33), (0.2, 1.18, 1.14, YAW + 0.63, 0.32),
-              (-0.45, 1.16, 1.08, YAW + 0.61, 0.34), (-0.75, 1.06, 1.0, YAW + 0.6, 0.4), (-0.9, 0.9, 0.86, YAW + 0.6, 0.47)], W, 7, 'nacelle')
-        loft([(1.8, 0.9, 0.24, YAW + 0.25, 0.42), (-0.7, 1.08, 0.24, YAW + 0.22, 0.42)], '#c7cdd1', 5, 'skirt')
-        for y in (0.9, -0.1): loft([(y + 0.012, 1.19, 1.15, YAW + 0.64, 0.33), (y - 0.012, 1.19, 1.15, YAW + 0.64, 0.33)], W2, 7, 'seam')
+        loft(SEC, W, 1, 'nacelle', smooth=False)                                              # chamfered, flat-faced body
+        # two red bands: a slanted leading edge on each side, then wrapping round the back
+        def side_band(sx, zc, hh, y0, y1, slant):
+            x = sx * (wid(0.5) / 2 + 0.012); t = 0.024
+            poly = [(y0 + slant, zc + hh / 2), (y1, zc + hh / 2), (y1, zc - hh / 2), (y0, zc - hh / 2)]
+            bm = bmesh.new()
+            v0 = [bm.verts.new((x - t / 2, yy, zz)) for yy, zz in poly]; v1 = [bm.verts.new((x + t / 2, yy, zz)) for yy, zz in poly]
+            bm.faces.new(v0); bm.faces.new(list(reversed(v1)))
+            for k in range(4): bm.faces.new((v0[k], v1[k], v1[(k + 1) % 4], v0[(k + 1) % 4]))
+            bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+            me = bpy.data.meshes.new('band'); bm.to_mesh(me); bm.free()
+            o = bpy.data.objects.new('band', me); bpy.context.collection.objects.link(o); o.data.materials.append(mat(RED, 0.45))
+        for zc, hh, y0 in ((ZC + 0.08, 0.17, 0.05), (ZC - 0.22, 0.17, 0.2)):
+            for sx in (-1, 1): side_band(sx, zc, hh, y0, 1.96, 0.22)
+            loft([(1.95, wid(1.95) + 0.024, hh, zc, 0.05), (2.45, wid(2.45) + 0.024, hh, zc, 0.05), (2.6, 1.22, hh, zc, 0.05)], RED, 1, 'band', smooth=False)
+        # panel seams and a rear access door
+        for y in (-0.3, 0.55, 1.4):
+            for sx in (-1, 1): block((0.012, 0.012, 1.3), (sx * (wid(y) / 2 + 0.004), y, ZC), '#b9c0c5', 0.0)
+        block((0.62, 0.02, 0.7), (0, 2.755, ZC + 0.08), '#e6eaec', 0.015); block((0.05, 0.03, 0.12), (0.22, 2.77, ZC + 0.05), 'dark', 0.008)
+        # hexagon badge on both sides, near the front
         for sx in (-1, 1):
-            block((0.03, 2.4, 0.11), (sx * 0.593, 0.5, YAW + 0.47), 'green', 0.012)
-            block((0.03, 0.34, 0.18), (sx * 0.594, -0.4, YAW + 0.8), 'yellow', 0.01)
-            vent((sx * 0.58, 1.3, YAW + 0.8), 0.42, 0.26, 'X' if sx > 0 else '-X', 5, '#b7bec3', W2)
-        # side service hatch with two windows (right side, game +x)
-        block((0.03, 0.52, 0.42), (0.596, 0.35, YAW + 0.79), '#e3e7ea', 0.015)                 # side hatch above the stripe
-        for yy in (0.22, 0.48): block((0.03, 0.16, 0.12), (0.6, yy, YAW + 0.88), '#2d4250', 0.02)
-        block((0.04, 0.06, 0.05), (0.61, 0.15, YAW + 0.66), 'dark', 0.008)
-        # rear cooltop: a frame with angled fins above the tail
+            x = sx * (wid(-0.3) / 2 + 0.005)
+            hexo = cyl(0.23, 0.012, (x, -0.28, ZC + 0.12), '#7d868d', verts=6, bevel=0, rot=(math.pi / 6, math.pi / 2, 0))
+            cyl(0.2, 0.016, (x, -0.28, ZC + 0.12), W, verts=6, bevel=0, rot=(math.pi / 6, math.pi / 2, 0))
+            cyl(0.1, 0.02, (x, -0.28, ZC + 0.12), '#7d868d', verts=6, bevel=0, rot=(0, math.pi / 2, 0))       # cube symbol: outline
+            cyl(0.075, 0.024, (x, -0.28, ZC + 0.12), W, verts=6, bevel=0, rot=(0, math.pi / 2, 0))
+            for ang in (math.pi / 2, math.pi * 7 / 6, math.pi * 11 / 6):                                   # cube edges from the centre
+                yy, zz = math.cos(ang) * 0.04, math.sin(ang) * 0.04
+                block((0.026, 0.012, 0.085), (x, -0.28 + yy, ZC + 0.12 + zz), '#7d868d', 0.0, rot=(ang - math.pi / 2, 0, 0))
+            # side grilles (dark mesh panels) in the bands' gap and low at the back
+            block((0.02, 0.36, 0.12), (sx * (wid(1.6) / 2 + 0.008), 1.6, ZC - 0.07), '#3b4045', 0.004)
+            block((0.02, 0.42, 0.11), (sx * (wid(1.0) / 2 + 0.008), 1.0, ZC - 0.47), '#3b4045', 0.004)
+            for k in range(6): block((0.024, 0.02, 0.1), (sx * (wid(1.6) / 2 + 0.01), 1.45 + k * 0.06, ZC - 0.07), '#5a6168', 0.0)
+        # roof: edge vent blocks, hatch, cooler, two sensor masts with orange beacons
+        TOP = ZC + 0.75
         for sx in (-1, 1):
-            block((0.05, 0.7, 0.05), (sx * 0.4, 1.55, YAW + 1.68), 'steelD', 0.01)
-            for yy in (1.25, 1.85): block((0.05, 0.05, 0.42), (sx * 0.4, yy, YAW + 1.45), 'steelD', 0.01)
-        block((0.76, 0.64, 0.08), (0, 1.55, YAW + 1.27), 'steelD', 0.015)                      # cooler base
-        for k in range(9):
-            for j in range(3): block((0.76, 0.05, 0.045), (0, 1.27 + k * 0.07, YAW + 1.35 + j * 0.11 + (k % 2) * 0.03), '#d3d8db', 0.006)   # staggered louvres
-        block((0.85, 0.75, 0.04), (0, 1.55, YAW + 1.72), W2, 0.012)
-        # roof: hatch, handrail, service crane, aviation light, wind sensors, lightning rod
-        block((0.5, 0.6, 0.04), (0, 0.15, YAW + 1.22), '#d3d8db', 0.015)
-        block((0.06, 0.08, 0.04), (0.2, -0.12, YAW + 1.26), 'dark', 0.008)
-        for x in (-0.52, 0.52):
-            for yy in (-0.4, 0.35, 1.0): cyl(0.016, 0.3, (x, yy, YAW + 1.34), 'yellow', verts=8, bevel=0)
-            strut((x, -0.4, YAW + 1.49), (x, 1.0, YAW + 1.49), 0.016, 'yellow', True)
-        cyl(0.05, 0.55, (-0.3, 0.75, YAW + 1.48), 'yellow', verts=10, bevel=0.01)
-        strut((-0.3, 0.75, YAW + 1.74), (-0.3, 0.1, YAW + 1.86), 0.04, 'yellow')
-        cyl(0.005, 0.25, (-0.3, 0.12, YAW + 1.72), 'dark', verts=4, bevel=0); block((0.04, 0.04, 0.05), (-0.3, 0.12, YAW + 1.58), 'red', 0.008)
-        cyl(0.025, 0.24, (-0.2, 1.55, YAW + 1.82), 'dark', verts=8)
-        cyl(0.06, 0.04, (-0.2, 1.55, YAW + 1.955), 'dark', verts=12, bevel=0.008)
-        lathe([(0.055, 0), (0.05, 0.05), (0.03, 0.09), (0, 0.1)], (-0.2, 1.55, YAW + 1.975), 'red', segs=14)
-        cyl(0.02, 0.5, (0.22, 1.55, YAW + 1.97), 'dark', verts=8)
-        block((0.3, 0.02, 0.02), (0.22, 1.55, YAW + 2.22), 'dark', 0.004)
-        for sx in (-1, 1): lathe([(0.04, 0), (0.035, 0.03), (0, 0.04)], (0.22 + sx * 0.15, 1.55, YAW + 2.22), W2, segs=10)
-        cyl(0.012, 0.6, (0, 1.95, YAW + 1.5), 'steel', verts=6, bevel=0)
+            for k in range(5): block((0.08, 0.14, 0.06), (sx * 0.56, -0.45 + k * 0.22, TOP + 0.02), '#9aa2a8', 0.012)
+        block((0.5, 0.56, 0.03), (0, 0.45, TOP + 0.01), '#e3e7ea', 0.012); block((0.06, 0.06, 0.04), (0.2, 0.2, TOP + 0.04), 'dark', 0.008)
+        block((0.42, 0.34, 0.26), (-0.32, 1.72, TOP + 0.13), '#c9cfd3', 0.03)
+        for k in range(5): block((0.36, 0.02, 0.2), (-0.32, 1.56 + k * 0.08, TOP + 0.14), '#8d969c', 0.003) if False else None
+        cyl(0.11, 0.03, (-0.32, 1.72, TOP + 0.275), '#3b4045', verts=16, bevel=0.005)
+        for (mx, my) in ((-0.42, 0.95), (0.3, 1.25)):
+            block((0.18, 0.18, 0.04), (mx, my, TOP + 0.02), 'steelD', 0.01)
+            for dx in (-0.06, 0.06): cyl(0.012, 0.55, (mx + dx, my, TOP + 0.3), 'steel', verts=6, bevel=0)
+            for zz in (TOP + 0.2, TOP + 0.42): block((0.15, 0.02, 0.02), (mx, my, zz), 'steel', 0.003)
+            cyl(0.015, 0.3, (mx, my, TOP + 0.72), 'steel', verts=6, bevel=0)
+            lathe([(0.04, 0), (0.035, 0.04), (0.02, 0.07), (0, 0.08)], (mx, my, TOP + 0.87), 'orange', segs=12)
+            block((0.16, 0.012, 0.012), (mx, my, TOP + 0.62), 'dark', 0.002)
+        # helicopter hoist platform cantilevered off the back: deck, grating, mesh railings, brackets, windsock
+        DZ = TOP + 0.04; Y0, Y1, XW = 1.95, 3.55, 0.72
+        block((XW * 2, Y1 - Y0, 0.07), (0, (Y0 + Y1) / 2, DZ), '#f0a030', 0.012)
+        for k in range(16): block((XW * 2 - 0.04, 0.012, 0.012), (0, Y0 + 0.05 + k * 0.1, DZ + 0.04), '#d98a22', 0.0)
+        for sx in (-1, 1):
+            block((0.08, Y1 - Y0, 0.1), (sx * (XW - 0.04), (Y0 + Y1) / 2, DZ - 0.08), RED, 0.012)
+            strut((sx * (XW - 0.05), 2.72, ZC + 0.2), (sx * (XW - 0.05), Y1 - 0.1, DZ - 0.1), 0.06, RED)           # diagonal brace to the body
+        block((XW * 2, 0.08, 0.1), (0, Y1 - 0.04, DZ - 0.08), RED, 0.012)
+        RH = 0.55
+        def rail(a, b):
+            a, b = Vector(a), Vector(b); n = max(2, int((b - a).length / 0.4))
+            for i in range(n + 1): cyl(0.016, RH, a.lerp(b, i / n) + Vector((0, 0, RH / 2)), RED, verts=8, bevel=0)
+            strut(a + Vector((0, 0, RH)), b + Vector((0, 0, RH)), 0.022, RED, True); strut(a + Vector((0, 0, RH * 0.5)), b + Vector((0, 0, RH * 0.5)), 0.014, RED, True)
+            m = max(4, int((b - a).length / 0.05))
+            for i in range(m): cyl(0.004, RH - 0.06, a.lerp(b, (i + 0.5) / m) + Vector((0, 0, RH / 2)), '#c9b8b0', verts=4, bevel=0)   # mesh infill
+        rail((-XW, Y0 + 0.35, DZ + 0.035), (-XW, Y1, DZ + 0.035)); rail((XW, Y0 + 0.35, DZ + 0.035), (XW, Y1, DZ + 0.035)); rail((-XW, Y1, DZ + 0.035), (XW, Y1, DZ + 0.035))
+        cyl(0.02, 1.1, (XW + 0.05, Y1, DZ + 0.6), 'steel', verts=8, bevel=0)
+        for i in range(4): lathe([(0.1 - i * 0.018, 0), (0.082 - i * 0.018, 0.13)], (XW + 0.05, Y1 - 0.06 - i * 0.13, DZ + 1.08), 'orange' if i % 2 == 0 else W, axis='Y', segs=10)
     parts = collect(nac)
     for o in parts: o.parent = yaw; o.matrix_parent_inverse = yaw.matrix_world.inverted()
     # ---------- rotor: nose cone with blade collars, nose cap and bearing ring; three blades
     rotor = empty('rotor', HUB); rotor.parent = yaw; rotor.matrix_parent_inverse = yaw.matrix_world.inverted()
     def rot():
-        lathe([(0.58, 0), (0.63, 0.12), (0.63, 0.32), (0.58, 0.56), (0.47, 0.8), (0.3, 1.0), (0.12, 1.13), (0, 1.16)], (0, -0.86, YAW + 0.6), W, axis='-Y', segs=40, name='spinner')
+        lathe([(0.56, 0), (0.6, 0.1), (0.6, 0.3), (0.56, 0.52), (0.46, 0.75), (0.3, 0.93), (0.12, 1.04), (0, 1.07)], (0, -0.86, YAW + 0.6), W, axis='-Y', segs=48, name='spinner')
         lathe([(0.645, 0), (0.645, 0.03)], (0, -0.98, YAW + 0.6), W2, axis='-Y', segs=40)
         lathe([(0.13, 0), (0.1, 0.05), (0, 0.07)], (0, -1.99, YAW + 0.6), W2, axis='-Y', segs=20)
         cyl(0.52, 0.16, (0, -0.84, YAW + 0.6), 'steelD', axis='Y', verts=40, bevel=0.02)
@@ -227,10 +264,7 @@ def wind_turbine():
         for k in range(3):
             a = k * math.tau / 3; d = Vector((math.sin(a), 0, math.cos(a))); c = Vector(HUB)
             b = blade_v2(4.3)
-            ring_ = lathe([(0.27, 0), (0.29, 0.03), (0.29, 0.08), (0.27, 0.1)], (0, 0, 0.0), 'steelD', segs=24); ring_.parent = b
-            col = lathe([(0.3, 0), (0.25, 0.05), (0.24, 0.1)], (0, 0, -0.07), W2, segs=24); col.parent = b
-            for j in range(12):
-                aa = j / 12 * math.tau; bo = cyl(0.015, 0.025, (math.cos(aa) * 0.285, math.sin(aa) * 0.285, 0.105), 'steel', verts=6, bevel=0); bo.parent = b
+            col = lathe([(0.34, 0), (0.33, 0.05), (0.28, 0.12), (0.24, 0.2), (0.215, 0.3)], (0, 0, -0.1), W, segs=32); col.parent = b   # smooth white collar
             b.rotation_euler = (0, a, 0); b.location = c + d * 0.5
     rp = collect(rot)
     for o in rp:
