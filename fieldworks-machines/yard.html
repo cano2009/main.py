@@ -1350,6 +1350,12 @@ MD.swap(xf.root, 'models/py_transformer.glb');
 MD.swap(bess.root, 'models/py_bess.glb', { keep: (m) => under(m, bess.fans) });
 MD.swap(dp.root, 'models/py_panel.glb', { keep: (m) => under(m, Object.values(dp.breakers).map((b) => b.handle)) });
 MD.swap(sa.root, 'models/py_solar.glb', { attach: { table: sa.table }, keep: (m) => under(m, [sa.drive]) });
+// vehicles: body and wheel nodes go into the game's own groups (driving, steering and tipping stay exact); lamps, the
+// beacon, the trailer load and its tipping ram are the game's
+MD.swap(trac.root, 'models/vh_tractor.glb', { attach: { body: trac.body, w_rear0: trac.rear[0], w_rear1: trac.rear[1], w_front0: trac.front[0].w, w_front1: trac.front[1].w }, keep: (m) => under(m, [...trac.heads, trac.beacon]) });
+{ const T = IMPL.trailer; MD.swap(T.root, 'models/vh_trailer.glb', { attach: { bed: T.bed, w0: T.wheels[0], w1: T.wheels[1], w2: T.wheels[2], w3: T.wheels[3] }, keep: (m) => under(m, [T.load, T.ram]) }); }
+{ const old = []; tr.wheels.forEach((w) => w.g.traverse((o) => { if (o.isMesh) old.push(o); }));   // the physics vehicle moved the wheels out of the truck group
+  MD.swap(tr.root, 'models/vh_truck.glb', { attach: { body: tr.body, wheel0: tr.wheels[0].g, wheel1: tr.wheels[1].g, wheel2: tr.wheels[2].g, wheel3: tr.wheels[3].g }, keep: (m) => under(m, tr.headlights) }).then((r) => { if (r) old.forEach((o) => { o.visible = false; }); }); }
 function animateLine(dt) {
   const run = lineSim.running(), v = run ? lineSim.level.beltSpeed * lineSim.efficiency() * speed : 0;
   belt.move(v * dt);
@@ -1637,7 +1643,7 @@ function canPlace(kind, x, z, rot) {
   return '';
 }
 function placeBuilding(kind, x, z, rot) {
-  const b = BD.building(kind); b.root.position.set(x, 0, z); b.root.rotation.y = rot; stylize(b.root); scene.add(b.root);
+  const b = BD.building(kind); b.root.position.set(x, 0, z); b.root.rotation.y = rot; stylize(b.root); scene.add(b.root); MD.swap(b.root, 'models/bd_' + kind + '.glb');
   const [w, d] = footprint(kind, rot); b.body = addStatic(box3(w / 2 - 0.2, 2.6, d / 2 - 0.2), x, 2.6, z);
   Object.assign(b, { x, z, rot, name: BD.BUILDINGS[kind].name }); KEY_OF.set(b.root, 'build'); outlines.register(b.root); placed.push(b); envMats = null;
   return b;
@@ -1646,6 +1652,7 @@ function removeBuilding(b) { scene.remove(b.root); W.removeBody(b.body); STATICS
 function startBuild(kind) {
   cancelBuild(); BUILD.kind = kind; BUILD.rot = 0;
   const g = BD.building(kind); g.root.traverse((o) => { if (o.isMesh) { o.material = ghostOK; o.castShadow = false; } }); BUILD.ghost = g.root; scene.add(g.root);
+  MD.swap(g.root, 'models/bd_' + kind + '.glb').then((r) => { if (r) r.scene.traverse((o) => { if (o.isMesh) { o.material = BUILD.ok === false ? ghostBad : ghostOK; o.castShadow = false; } }); });
   const t = controls.target; moveGhost(Math.round(t.x), Math.round(t.z));
   $('build-place').hidden = false; $('build-rotate').hidden = false; $('build-cancel').hidden = false;
   toast(`${BD.BUILDINGS[kind].name}: ${touch ? 'tap the ground to move it, then Place' : 'move the mouse, R to rotate, click to place'} (${money(BD.BUILDINGS[kind].cost)})`);

@@ -69,6 +69,36 @@ export const GRADES = {
   dusk:      { exposure: 0.95, contrast: 1.06, saturation: 1.05, temp: 0.14, tint: 0.02, lift: [0.012, 0.004, 0.012], gain: [1.05, 0.96, 0.9] }
 };
 
+// Edge pass: crisp dark outlines on silhouettes and hard creases, the clean inked-edge look of polished simulation
+// games. It reuses the depth and normal buffers the ambient-occlusion pass already renders, so it costs one
+// full-screen pass. Lines thin out and fade with distance so far detail does not turn into noise.
+const EdgeShader = {
+  uniforms: {
+    tDiffuse: { value: null }, tDepth: { value: null }, tNormal: { value: null }, resolution: { value: new THREE.Vector2(1, 1) },
+    cameraNear: { value: 0.1 }, cameraFar: { value: 1000 }, strength: { value: 0.85 }, ink: { value: new THREE.Color(0.08, 0.09, 0.1) }
+  },
+  vertexShader: 'varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+  fragmentShader: `
+    #include <packing>
+    uniform sampler2D tDiffuse, tDepth, tNormal; uniform vec2 resolution; uniform float cameraNear, cameraFar, strength; uniform vec3 ink;
+    varying vec2 vUv;
+    float vz(vec2 uv) { return -perspectiveDepthToViewZ(unpackRGBAToDepth(texture2D(tDepth, uv)), cameraNear, cameraFar); }
+    vec3 nr(vec2 uv) { return normalize(texture2D(tNormal, uv).xyz * 2.0 - 1.0); }
+    void main() {
+      vec4 c = texture2D(tDiffuse, vUv);
+      vec2 px = 1.0 / resolution;
+      vec2 uv = (floor(vUv * resolution) + 0.5) * px;   // texel centres: packed depth must not be filtered between texels
+      float z = vz(uv);
+      float zl = vz(uv - vec2(px.x, 0.0)), zr = vz(uv + vec2(px.x, 0.0)), zd = vz(uv - vec2(0.0, px.y)), zu = vz(uv + vec2(0.0, px.y));
+      // second difference: a jump in depth (a silhouette), not a sloping surface
+      float dz = (abs(zl + zr - 2.0 * z) + abs(zu + zd - 2.0 * z)) / max(z, 1.0);
+      vec3 n = nr(uv);
+      float dn = 4.0 - dot(n, nr(uv - vec2(px.x, 0.0))) - dot(n, nr(uv + vec2(px.x, 0.0))) - dot(n, nr(uv - vec2(0.0, px.y))) - dot(n, nr(uv + vec2(0.0, px.y)));
+      float e = max(smoothstep(0.035, 0.1, dz), smoothstep(0.6, 1.4, dn) * 0.3);   // silhouettes full, creases faint (thin ribs would dash)
+      e *= strength * (1.0 - smoothstep(22.0, 75.0, z)) * step(z, cameraFar * 0.9);
+      gl_FragColor = vec4(mix(c.rgb, c.rgb * ink, e), c.a);
+    }`
+};
 // Final pass: exposure -> ACES filmic -> grade -> vignette -> sRGB. Replaces the renderer's own tone mapping,
 // which three.js skips when rendering into the composer's HDR buffers.
 const FinalShader = {
@@ -145,12 +175,15 @@ export function createGraphics(opts) {
   const renderPass = new RenderPass(scene, camera);
   const sao = new SAOPass(scene, camera, false, true, new THREE.Vector2(256, 256));
   Object.assign(sao.params, { output: 0, saoBias: 0.5, saoIntensity: 0.012, saoScale: 4, saoKernelRadius: 22, saoMinResolution: 0, saoBlur: true, saoBlurRadius: 6, saoBlurStdDev: 3, saoBlurDepthCutoff: 0.01 });
+  const edge = new ShaderPass(EdgeShader);
+  edge.uniforms.tDepth.value = sao.depthRenderTarget.texture; edge.uniforms.tNormal.value = sao.normalRenderTarget.texture;
   const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.55, 0.42, 1.4);
   const final = new ShaderPass(FinalShader);
   const smaa = new SMAAPass(256, 256);
   const fxaa = new ShaderPass(FXAAShader);
   composer.addPass(renderPass);
   composer.addPass(sao);
+  composer.addPass(edge);
   composer.addPass(bloom);
   composer.addPass(final);
   composer.addPass(smaa);
@@ -243,6 +276,7 @@ export function createGraphics(opts) {
   }
   function apply(changed) {
     sao.enabled = settings.ao;
+    edge.enabled = settings.ao && (settings.edges === undefined ? 0.85 : settings.edges) > 0; edge.uniforms.strength.value = settings.edges === undefined ? 0.85 : settings.edges;
     sao.params.saoIntensity = 0.012 * (settings.aoStrength || 1);
     bloom.enabled = settings.bloom;
     bloom.strength = settings.bloomStrength;
@@ -264,7 +298,7 @@ export function createGraphics(opts) {
     composer.setPixelRatio(pr);
     composer.setSize(size.x, size.y);
     const W = Math.round(size.x * pr), H = Math.round(size.y * pr);
-    sao.setSize(Math.round(W / 2), Math.round(H / 2));
+    sao.setSize(Math.round(W / 2), Math.round(H / 2)); edge.uniforms.resolution.value.set(Math.round(W / 2), Math.round(H / 2));
     bloom.setSize(Math.round(W / 2), Math.round(H / 2));
     fxaa.uniforms.resolution.value.set(1 / W, 1 / H);
     final.uniforms.resolution.value.set(W, H);
@@ -315,7 +349,7 @@ export function createGraphics(opts) {
   // ---------- public API ----------
   let prev = performance.now();
   const api = {
-    composer, passes: { renderPass, sao, bloom, final, smaa, fxaa },
+    composer, passes: { renderPass, sao, edge, bloom, final, smaa, fxaa },
     get settings() { return Object.assign({ preset: presetName }, settings); },
     setPreset(name) {
       if (!PRESET_NAMES.includes(name)) return;
@@ -341,6 +375,7 @@ export function createGraphics(opts) {
       const bg = scene.background;
       const keep = !!(bg && bg.isColor);
       if (keep) { scene.background = backgroundFor(bg); }
+      edge.uniforms.cameraNear.value = camera.near; edge.uniforms.cameraFar.value = camera.far;
       composer.render(dt);
       if (keep) scene.background = bg;
     },

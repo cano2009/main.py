@@ -138,6 +138,8 @@ def join(objs, name, parent=None):
     return o
 
 def export(path):
+    for m in bpy.data.materials:   # closed models: single-sided faces (glass stays double-sided)
+        if m.blend_method == 'OPAQUE': m.use_backface_culling = True
     bpy.ops.object.select_all(action='SELECT')
     bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', export_apply=True, export_yup=True, export_extras=True)
 
