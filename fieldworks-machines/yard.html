@@ -1465,14 +1465,31 @@ function animateParts(dt) {
     if (A.tex) A.tex.offset.x -= pgrid.beltSpeed * dt * vis / 0.46;
     if (A.items) { const k = Math.round(Math.min(1, p.palletN / 20) * A.items.length); A.items.forEach((it, i) => { it.visible = i < k; }); }
     const F = m.fw; if (!F) return;
-    const P = PW.PARTS[p.type], run = envP.powered && (!P.use || p.on), mv = run ? dt * vis : 0;
-    if (F.cleats) F.cleats.position.x = ((F.cleats.position.x + pgrid.beltSpeed * mv) % 0.24 + 0.24) % 0.24;
+    const P = PW.PARTS[p.type], run = envP.powered && (!P.use || p.on), mv = run ? dt * vis : 0, bs = pgrid.beltSpeed * mv;
+    if (!F._p0) { F._p0 = {}; ['clamp', 'carriage', 'pusher', 'press'].forEach((k) => { if (F[k]) F._p0[k] = F[k].position.clone(); }); }
+    const P0 = F._p0, ease = Math.min(1, dt * 10), phase = p.busy ? 1 - Math.max(0, p.t) / P.t : 0;
+    // belts: cleats scroll, drums and turn rollers roll at belt speed
+    if (F.cleats) F.cleats.position.x = ((F.cleats.position.x + bs) % 0.24 + 0.24) % 0.24;
+    if (F.drum0) { F.drum0.rotation.z -= bs / 0.06; F.drum1.rotation.z -= bs / 0.06; }
+    for (let k = 0; F['troll' + k]; k++) F['troll' + k].rotateX(bs / 0.032);
+    // machines: everything that cuts, feeds or presses moves only while a unit is being worked
     const work = p.busy && run ? (p.speed || 1) * mv : 0;
     if (F.wheel) F.wheel.rotation.z -= work * 14;
     if (F.blade) F.blade.rotation.z -= work * 22;
-    if (F.press) F.press.position.y = 0.55 + 0.62 - (p.busy ? Math.max(0, Math.sin((1 - Math.max(0, p.t) / P.t) * Math.PI)) * 0.2 : 0);
+    if (F.feed0) { F.feed0.rotation.z -= work * 6; F.feed1.rotation.z -= work * 6; }
+    if (F.pulley) F.pulley.rotation.x += work * 30;
+    if (F.clamp) F.clamp.position.y += (P0.clamp.y - (p.busy ? 0.08 : 0) - F.clamp.position.y) * ease;
+    if (F.carriage) F.carriage.position.z = P0.carriage.z + (p.busy ? Math.sin(phase * Math.PI * 2) * 0.14 : 0);
+    if (F.fan) F.fan.rotation.z += (p.busy ? 16 : run ? 3 : 0) * dt * vis;
+    if (F.press) F.press.position.y = P0.press.y - (p.busy ? Math.max(0, Math.sin(phase * Math.PI)) * 0.2 : 0);
+    if (F.arm) F.arm.rotation.y += ((p.busy ? Math.sin(Math.min(1, phase * 1.6) * Math.PI) * Math.PI : 0) - F.arm.rotation.y) * ease;
+    // junctions: the splitter paddle closes the side the next unit must not take, the filter kicks sorted units south
+    if (F.paddle) { const it = p.belt.find((u) => u.p < 0.8); if (it) F.paddle.rotation.y += ((it.to === 'N' ? 0.5 : -0.5) - F.paddle.rotation.y) * ease; }
+    if (F.pusher) { const it = p.belt.find((u) => u.to === 'S' && u.p > 0.3 && u.p < 0.75); F.pusher.position.z = P0.pusher.z + (it ? Math.sin((it.p - 0.3) / 0.45 * Math.PI) * 0.3 : 0); }
+    if (F.beacon) F.beacon.rotation.y += (p.belt.length && run ? 6 : 0) * dt * vis;
     const em = (n, k) => { if (n) n.traverse((o) => { if (o.isMesh) o.material.emissiveIntensity = o.userData.e0 * k; }); };
     if (F.beam) em(F.beam, p.blink > 0 ? 0.15 : run ? 1 : 0.05);
+    if (F.beacon) em(F.beacon, p.belt.length && run ? 1 : 0.1);
     if (F.glow) { const g = p.busy && run ? 0.85 + Math.sin(performance.now() / 140) * 0.15 : p.buf && p.buf.length ? 0.35 : 0.08; em(F.glow, g); em(F.glow2, g); }
     if (F.lamp_g) { const st = !run ? 'r' : p.busy ? 'g' : 'a'; em(F.lamp_g, st === 'g' ? 3 : 0.08); em(F.lamp_a, st === 'a' ? 3 : 0.08); em(F.lamp_r, st === 'r' ? 3 : 0.08); }
   });
@@ -1634,13 +1651,18 @@ function partXZ(i, j) { return [i * PW.CELL, j * PW.CELL]; }
 // Blender-made models for the factory family (conveyors and inline machines); the code-built model is the fallback
 const FW_MODEL = { belt: 1, bturn: 1, bleft: 1, split: 1, merge: 1, filter: 1, sensor: 1, sawmill: 1, stonecutter: 1, smelter: 1, packer: 1 };
 const partOff = (type) => ((PW.PARTS[type].len || 1) - 1) * PW.CELL / 2;   // long parts: model centre from the first cell, along local east
+// the older placeable parts get Blender bodies too; the game's own shafts, rotor, clutch plate, valve handle, rams,
+// level gauges and pallet load stay visible and keep animating
+const PP_MODEL = { motor: 1, engine: 1, wind: 1, shaft: 1, bevel: 1, reducer: 1, stepup: 1, clutch: 1, pack: 1, pump: 1, hose: 1, corner: 1, tee: 1, valve: 1, accum: 1, bin: 1, pallet: 1, mill: 1, baler: 1, splitter: 1 };
 function fwSwap(root, type, ghost) {
-  if (!FW_MODEL[type]) return Promise.resolve(null);
-  return MD.swap(root, 'models/fw_' + type + '.glb').then((r) => {
+  if (!FW_MODEL[type] && !PP_MODEL[type]) return Promise.resolve(null);
+  const keepSet = new Set(root.userData.keep || []);
+  const keep = (m) => { for (let a = m; a && a !== root; a = a.parent) if (keepSet.has(a)) return true; return false; };
+  return MD.swap(root, 'models/' + (FW_MODEL[type] ? 'fw_' : 'pp_') + type + '.glb', { keep }).then((r) => {
     if (!r) return null; r.scene.position.x = partOff(type);
     if (ghost) { r.scene.traverse((o) => { if (o.isMesh) { o.material = BUILD.ok ? ghostOK : ghostBad; o.castShadow = false; } }); return r; }
     // lamps, beams and glows change per machine: give each its own material
-    ['lamp_g', 'lamp_a', 'lamp_r', 'beam', 'glow', 'glow2', 'screen'].forEach((k) => { const n = r.parts[k]; if (n) n.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); o.userData.e0 = o.material.emissiveIntensity || 1; } }); });
+    ['lamp_g', 'lamp_a', 'lamp_r', 'beam', 'glow', 'glow2', 'screen', 'beacon'].forEach((k) => { const n = r.parts[k]; if (n) n.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); o.userData.e0 = o.material.emissiveIntensity || 1; } }); });
     return r;
   });
 }

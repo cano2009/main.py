@@ -229,7 +229,7 @@ export function partModel(type) {
     A.items = items; A.pg = g;
   }
   const keep = [...spin.map((s) => s.g), ...['plate', 'lever', 'handle', 'level', 'ram', 'head', 'pg', 'shake'].map((k) => A[k]).filter(Boolean)];
-  bake(root, keep);
+  bake(root, keep); root.userData.keep = keep;   // the animated pieces a Blender body leaves visible
   return { root, spin, A, type };
 }
 const IG = {};

@@ -27,7 +27,7 @@ export function swap(host, url, o) {
       if (m.name) parts[m.name] = m;
       if (!m.isMesh) return;
       m.castShadow = true; m.receiveShadow = true;
-      const mat = m.material; if (mat) { mat.flatShading = true; mat.needsUpdate = true; mat.userData.lowpoly = true; mat.envMapIntensity = 0.3; if (mat.roughness !== undefined) mat.roughness = Math.max(0.35, mat.roughness); }
+      const mat = m.material; if (mat) { mat.needsUpdate = true; mat.userData.lowpoly = true; mat.envMapIntensity = 0.85; if (mat.roughness !== undefined) mat.roughness = Math.max(0.28, mat.roughness); }   // the model's own bevelled normals give the mid-poly shading
     });
     scene.userData.fromBlender = url;
     host.add(scene);

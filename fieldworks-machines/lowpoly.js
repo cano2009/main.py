@@ -60,8 +60,8 @@ function stylMat(m, o) {
   n.map = keep(m.map); n.emissiveMap = keep(m.emissiveMap) || m.emissiveMap;
   n.normalMap = null; n.roughnessMap = null; n.metalnessMap = null; n.aoMap = null;
   n.roughness = Math.max(o.minRough || 0.42, m.roughness);
-  n.metalness = Math.min(m.metalness, 0.3);
-  if (!m.vertexColors && !m.map && !m.transparent) n.color.offsetHSL(0, 0.06, 0.02);   // a touch more saturated
+  n.metalness = Math.min(m.metalness, STYLE.mid ? 0.65 : 0.3);
+  if (!STYLE.mid && !m.vertexColors && !m.map && !m.transparent) n.color.offsetHSL(0, 0.06, 0.02);   // a touch more saturated (faceted style only)
   n.userData = Object.assign({}, m.userData, { lowpoly: true });
   n.onBeforeCompile = m.onBeforeCompile; if (m.customProgramCacheKey !== THREE.Material.prototype.customProgramCacheKey) n.customProgramCacheKey = m.customProgramCacheKey;
   n.needsUpdate = true;
@@ -78,7 +78,16 @@ function hullGeometry(g) {
   hullCache.set(g, h); return h;
 }
 // The reference look is clean faceted shapes without ink lines; set STYLE.outline = true for the toon style.
-export const STYLE = { outline: false };   // ink hulls off: the references are clean shapes lit softly, not inked
+export const STYLE = { outline: false, mid: true };   // ink hulls off; mid: smooth bevelled shading (see below)
+// Mid-poly style switch. Every material in the game used to ask for flat shading (one colour per facet). In the mid
+// style surfaces shade smoothly across bevels and round parts while hard edges stay hard (boxes, chamfers and the
+// Blender models carry their own split normals), which is what makes a model read as properly modelled rather than
+// primitive. Natural props that should stay crisply faceted mark their material with userData.faceted.
+Object.defineProperty(THREE.Material.prototype, 'flatShading', {
+  configurable: true,
+  get() { if (this.userData && this.userData.faceted) return true; return STYLE.mid ? false : !!this._flat; },
+  set(v) { this._flat = !!v; }
+});
 const outlineMats = new Map();
 function outlineMaterial(th, color) {
   const k = th.toFixed(4) + color;
@@ -172,7 +181,7 @@ export function cropMaterials(F, onBeforeCompile) {
 // ---------------------------------------------------------------------------
 // Low-poly nature props
 const lin = (h) => new THREE.Color(h).convertSRGBToLinear();
-function flatMat(c, rough) { const m = new THREE.MeshStandardMaterial({ color: lin(c), roughness: rough || 0.85, flatShading: true }); m.userData.lowpoly = true; return m; }
+function flatMat(c, rough) { const m = new THREE.MeshStandardMaterial({ color: lin(c), roughness: rough || 0.85, flatShading: true }); m.userData.lowpoly = true; m.userData.faceted = true; return m; }
 const NATURE = { trunk: flatMat('#7a5a3c'), birch: flatMat('#e8e4da'), leafA: flatMat('#7cc24a'), leafB: flatMat('#5ea83c'), leafC: flatMat('#e08a2e'), rock: flatMat('#8d949a'), apple: flatMat('#d23a2c', 0.5) };
 function jitter(geo, amt, seed) {
   let s = seed || 1; const r = () => (s = (s * 16807) % 2147483647) / 2147483647 - 0.5;

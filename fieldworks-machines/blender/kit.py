@@ -5,7 +5,7 @@
 import bpy, bmesh, math, sys, os
 
 # Low-poly mode: flat-shaded facets, few segments, single-step bevels (the chunky faceted look of the art direction)
-LOWPOLY = True
+LOWPOLY = False   # mid-poly: 2-segment bevels with weighted (hardened) normals, full segment counts, smooth round parts
 def segs_(n, lo=6): return max(lo, int(round(n * 0.32))) if LOWPOLY else n
 from mathutils import Vector, Matrix
 
@@ -46,6 +46,8 @@ def _finish(o, m, bevel, segs=2, smooth=False):
         b = o.modifiers.new('bevel', 'BEVEL'); b.width = bevel; b.segments = 1 if LOWPOLY else segs; b.limit_method = 'ANGLE'; b.angle_limit = math.radians(40)
         b.harden_normals = not LOWPOLY
         o.data.use_auto_smooth = True; o.data.auto_smooth_angle = math.radians(35)
+        if not LOWPOLY:
+            for p in o.data.polygons: p.use_smooth = True   # bevels shade as soft rounded edges, flat faces stay flat
     if smooth:
         for p in o.data.polygons: p.use_smooth = not LOWPOLY
         o.data.use_auto_smooth = True; o.data.auto_smooth_angle = math.radians(50)
@@ -142,7 +144,7 @@ def export(path):
 def preview(path, cam_loc=(5, -5, 4), target=(0, 0, 0.6), size=(1000, 800), lens=50, ortho=None):
     """Clean studio render to check the model (Cycles on the CPU, soft light, grey backdrop)."""
     sc = bpy.context.scene
-    sc.render.engine = 'CYCLES'; sc.cycles.samples = 48; sc.cycles.use_denoising = False; sc.cycles.samples = 96; sc.cycles.device = 'CPU'
+    sc.render.engine = 'CYCLES'; sc.cycles.samples = 48; sc.cycles.use_denoising = False; sc.cycles.samples = int(os.environ.get('FW_SAMPLES', 96)); sc.cycles.device = 'CPU'
     sc.render.resolution_x, sc.render.resolution_y = size; sc.render.filepath = path; sc.view_settings.view_transform = 'Standard'
     w = bpy.data.worlds.new('w'); sc.world = w; w.use_nodes = True; w.node_tree.nodes['Background'].inputs[0].default_value = (0.78, 0.8, 0.82, 1); w.node_tree.nodes['Background'].inputs[1].default_value = 0.9
     bpy.ops.mesh.primitive_plane_add(size=60, location=(0, 0, 0)); fl = bpy.context.object; fl.data.materials.append(mat('#d7d9db', 0.9)); fl.name = '__floor'
