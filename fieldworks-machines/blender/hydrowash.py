@@ -1,8 +1,7 @@
 # Fieldworks Hydro-Wash Station Mk II: a tunnel washer that straddles the line belt.
 # Core housing with service hatch, louvres and bolted corners; stepped entry/exit shrouds with rubber curtains;
-# a gridded catwalk with railings on top carrying two fluid tanks (wash, rinse) with sight windows, a twin dosing
-# pump with pressure gauges, a flanged manifold with valves, and hoses dropping into the spray tunnels; a caged
-# ladder; a control post with screen, buttons, e-stop and a stack light; hazard-striped skids, drip trays.
+# a gridded catwalk with railings on top (no ladder) carrying two fluid tanks (wash, rinse) with sight windows, a twin dosing
+# pump with pressure gauges, a flanged manifold with valves, and hoses dropping into the spray tunnels; a control post with screen, buttons, e-stop and a stack light; hazard-striped skids, drip trays.
 # Animated parts: fluid0, fluid1 (tank levels), stack_g / stack_a / stack_r (stack light lamps).
 # Blender z-up, belt along x, belt top z = 0.8. Run with --preview-belt to add a belt section to the preview only.
 import sys, os, math
@@ -108,18 +107,6 @@ def hydrowash(preview_belt=False):
     for sx in (-1, 1):
         pipe([(sx * 0.6, MY, MZ), (sx * 0.7, MY - 0.05, MZ - 0.05), (sx * 0.86, -0.5, TZ - 0.05), (sx * 0.86, -0.42, BZ + 0.73)], 0.028, 'water')
         cyl(0.04, 0.05, (sx * 0.86, -0.42, BZ + 0.7), 'yellowD', verts=10)
-    # ---------- caged ladder up the front-left to the catwalk
-    LX = -0.85; LY = -0.84
-    for dx in (-0.17, 0.17):
-        block((0.05, 0.05, TZ + 0.5), (LX + dx, LY, (TZ + 0.5) / 2), 'yellow', 0.012)
-        block((0.05, 0.14, 0.05), (LX + dx, LY + 0.07, TZ), 'yellow', 0.01)
-    for k in range(8): cyl(0.016, 0.34, (LX, LY, 0.22 + k * 0.21), 'steel', axis='X', verts=8)
-    # safety cage: horizontal half-hoops in front of the climber, tied by three vertical straps
-    for z in (1.0, 1.35, 1.7, 2.05):
-        pipe([(LX - 0.19 + 0.38 * (1 - math.cos(t)) / 2 * 0 + (-0.19 * math.cos(t)), LY - 0.02 - 0.26 * math.sin(t), z) for t in [i / 10 * math.pi for i in range(11)]], 0.013, 'yellow', bend=0)
-    for t in (0.25, 0.5, 0.75):
-        a = t * math.pi
-        pipe([(LX - 0.19 * math.cos(a), LY - 0.02 - 0.26 * math.sin(a), 1.0), (LX - 0.19 * math.cos(a), LY - 0.02 - 0.26 * math.sin(a), 2.05)], 0.011, 'yellow', bend=0)
     # ---------- control post at the front-right: angled panel with screen, buttons, e-stop, stack light
     CX, CY = 0.95, -0.95
     block((0.1, 0.1, 1.05), (CX, CY, 0.52), 'steelD', 0.02); block((0.3, 0.3, 0.05), (CX, CY, 0.025), 'dark', 0.015)
