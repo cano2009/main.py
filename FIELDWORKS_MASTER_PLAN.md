@@ -29,6 +29,23 @@ Before integrating, step 1 of the prompt still has to happen: inspect the real p
 | 20. Saving | Autosave with a backup copy and validation on load. |
 | 3, 16. Validation | Every new model passes the validator (0 errors, 0 warnings). It found and fixed a floating tractor front axle, harvester wheels with no axle, oven walls 27 cm above their base, and an unmounted mill motor. |
 
+## Stage 1c (done here): the 100x prompt, first connected loop
+
+This stage builds one loop that runs through the whole farm, instead of many disconnected machines: soil sets crop quality, the sorter rejects poor produce, the digester turns rejects into power and fertiliser, and the rover puts the fertiliser back where the soil needs it. The rules controller and the diagnostics sit on top of everything.
+
+| 100x prompt section | What exists now | Files |
+|---|---|---|
+| 2E. Smart resource recovery | Bio-recovery digester: an auger from the sorter's reject tote, a twin-shaft shredder, a heated digester tank with a gas dome that swells with biogas, a biogas engine that powers the yard, a flare, and a digestate pump. Digestion slows below 30 °C, and the engine's waste heat keeps the tank warm. | `invent.js`, `industry.js` |
+| 2A, 2C. Adaptive agricultural engine, autonomous rover | Soil steward station (scanning mast, weather head, console with a live nitrogen map, digestate tank, rover dock with a charger and fill spout) and a high-clearance straddle rover. The rover drives through the east gate, probes stale zones and feeds hungry ones. | `invent.js`, `industry.js` |
+| 6, 7. Soil intelligence | Every plant cell has moisture, nitrogen, organic matter and compaction. Crops have nitrogen needs, legumes fix their own, organic matter holds water and releases nitrogen, plowing loosens soil and heavy passes pack it, and planting the same crop twice costs 15% growth. Rain waters the field. | `sims.js` |
+| 8. Quality grades | Soil quality during growth sets grade A (+20%), B or C. The optical sorter brushes grade C into the reject tote. | `sims.js` |
+| 5. Programmable automation | Logic controller with up to 8 rules (if a sensor is above or below a value, then an action). It has 12 sensors and 9 actions, and each action works only on a machine wired to the controller by a purple signal cable. The rules are edited in the game, held with a small margin so they don't flicker, saved, and shown on the cabinet's lights. | `industry.js`, `yard.html` |
+| 4. Connections | A new digestate line port type. 74 links: a buried digestate main, five signal cables, a new pole on the overhead line, and the auger joined to the tote. | `ports.js` |
+| 14, 15. Diagnostics and screens | A Diagnose tab on every machine: unconnected ports, power (and which breaker or rule cut it), faults, wear and process problems, each with a fix. A yard-wide diagnostics view. Live screens on the digester, steward, rover and controller. | `yard.html` |
+| 16. Quality control | All new models pass the validator: 0 errors, 0 warnings. | `validate.js` |
+
+Still to build from the 100x prompt, in order of value: the modular machine designer (section 3), production recipes and multi-stage cores (2B, 2D, 8), mechanical and hydraulic power types (4, 9), fluid pressure and flow (11), logistics routes and forklifts (12), blueprints, milestones and environmental footprint (14), and crop research (6).
+
 ## Stage 2: needs the real project (PC connected)
 1. Inspect the real game: engine, chunk terrain, save format, building system, vehicles, existing assets.
 2. Run the validator on every real model (it works on any three.js object tree) and fix what it finds.

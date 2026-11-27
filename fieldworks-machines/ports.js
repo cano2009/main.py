@@ -13,6 +13,7 @@ export const PORT_TYPES = {
   conveyor: { label: 'Conveyor',         color: '#9bd04a', maxGap: 0.15, align: 25 },
   wire:     { label: 'Overhead line',    color: '#d0d0d0', maxGap: 0.05 },
   signal:   { label: 'Automation signal', color: '#c58cff', maxGap: 0.05 },
+  slurry:   { label: 'Digestate line',    color: '#8a6a3a', maxGap: 0.05 },
   hitch:    { label: 'Three-point hitch', color: '#e9b830', maxGap: 0.05, align: 10 }
 };
 
@@ -37,7 +38,7 @@ function socket(parent, p) {
   const g = new THREE.Group(); g.position.copy(p.pos); g.quaternion.setFromUnitVectors(new V(0, 1, 0), p.dir); parent.add(g);
   const add = (geo, hex, y) => { const mesh = new THREE.Mesh(geo, m(hex)); mesh.position.y = y; mesh.castShadow = true; mesh.userData.socketPart = true; g.add(mesh); return mesh; };
   if (p.type === 'power' || p.type === 'signal') { add(new THREE.CylinderGeometry(0.045, 0.055, 0.06, 8), '#2b2d30', -0.03); add(new THREE.CylinderGeometry(0.032, 0.032, 0.03, 8), '#575b60', 0.0); }
-  else if (p.type === 'water' || p.type === 'fuel') { add(new THREE.CylinderGeometry(0.11, 0.11, 0.035, 10), '#8f979c', -0.018); }
+  else if (p.type === 'water' || p.type === 'fuel' || p.type === 'slurry') { add(new THREE.CylinderGeometry(0.11, 0.11, 0.035, 10), '#8f979c', -0.018); }
   g.userData.socket = p.id; p.socketMesh = g;
   return g;
 }
