@@ -7,9 +7,10 @@ through `models.js`. Open a script in Blender's Scripting tab to edit a model by
 
 - `kit.py` – shared helpers: bevelled blocks, round cylinders, octagonal bolts, bent pipes, gears, vents, the
   Fieldworks palette, glTF export and a Cycles preview render.
-- `washer.py` – the hoop washer: an original Fieldworks design (brush and flaps, spray hood with hoops, sump with sight glass, filter drum, pump, blower).
+- `hydrowash.py` – the Hydro-Wash Station Mk II (the line washer in the game): catwalk, two fluid tanks with sight windows, dosing pump, valved manifold, hoses, caged ladder, control post with stack light.
+- `washer.py` – the hoop washer (kept as an alternative): an original Fieldworks design (brush and flaps, spray hood with hoops, sump with sight glass, filter drum, pump, blower).
 - `conveyor.py` – a conveyor section used for previews.
 
-Named parts the game animates: `water0` (sump sight glass), `brush`, `fan`, `belt`.
+Named parts the game animates: `fluid0`, `fluid1` (tank levels), `stack_g`, `stack_a`, `stack_r` (stack light), `water0`, `brush`, `fan` (hoop washer), `belt`.
 
 Design rule: the reference images set the style (bevelled shapes, clean colour, detail density), never the machine itself. Each machine is designed from what it does.
