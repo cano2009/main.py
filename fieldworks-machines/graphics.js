@@ -26,12 +26,12 @@ export const PRESETS = {
     textureQuality: 'low', effects: 'low', adaptive: true
   },
   medium: {
-    renderScale: 1, maxPixelRatio: 1, antialias: 'smaa', ao: true, aoStrength: 1.0, bloom: true, bloomStrength: 0.2,
+    renderScale: 1, maxPixelRatio: 1, antialias: 'smaa', ao: true, aoStrength: 1.0, bloom: true, bloomStrength: 0.38,
     shadows: 'medium', reflections: 'low', envStrength: 0.32, grade: true, vignette: 0.15, viewDistance: 0.8, foliageDensity: 0.7,
     textureQuality: 'medium', effects: 'medium', adaptive: true
   },
   high: {
-    renderScale: 1, maxPixelRatio: 1.5, antialias: 'smaa', ao: true, aoStrength: 1.1, bloom: true, bloomStrength: 0.3,
+    renderScale: 1, maxPixelRatio: 1.5, antialias: 'smaa', ao: true, aoStrength: 1.1, bloom: true, bloomStrength: 0.45,
     shadows: 'high', reflections: 'high', envStrength: 0.38, grade: true, vignette: 0.2, viewDistance: 1, foliageDensity: 1,
     textureQuality: 'high', effects: 'high', adaptive: false
   },

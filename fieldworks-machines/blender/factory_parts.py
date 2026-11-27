@@ -47,6 +47,18 @@ def node(name, loc, fn, rot_z=None):
 def glow(o, col, k):
     o.data.materials.clear(); o.data.materials.append(mat(col, 0.4, 0.0, emit=k)); return o
 
+LEDS = []
+LED = '#39f08a'
+def led_strip(size, loc, col=LED, k=3.2):
+    """Glowing accent strip (Blender size and location); gathered into the model's 'leds' node at export."""
+    o = block(size, loc, col, 0.0, name='led'); o.data.materials.clear(); o.data.materials.append(mat(col, 0.4, 0.0, emit=k)); LEDS.append(o); return o
+def finalize_leds():
+    if not LEDS: return
+    e = empty('leds', (0, 0, 0)); bpy.context.view_layer.update()
+    for o in LEDS:
+        if o.parent is None: o.parent = e; o.matrix_parent_inverse = e.matrix_world.inverted()
+    LEDS.clear()
+
 def prism(poly, a0, a1, m, axis='y', name='prism', bevel=0.012):
     """Extrude a polygon given in (u, z) between a0 and a1 along `axis` ('y': u is x; 'x': u is y)."""
     bm = bmesh.new()
@@ -175,6 +187,7 @@ def head(icon):
             block((0.1, 0.03, 0.18), (sx * 0.5, sy * 0.44, H - 0.1), RAILD, 0.006)              # gusset
     block((1.12, 1.12, 0.1), (0, 0, H + 0.06), CAP, 0.025)                                       # yellow frame
     block((0.9, 0.9, 0.1), (0, 0, H + 0.08), '#9aa2a8', 0.02)                                     # steel deck inset
+    for sy in (-1, 1): led_strip((1.0, 0.02, 0.02), (0, sy * 0.562, H + 0.02)); led_strip((0.02, 1.0, 0.02), (sy * 0.562, 0, H + 0.02))
     for sx in (-1, 1):
         for sy in (-1, 1): bolt((sx * 0.5, sy * 0.5, H + 0.11), 'Z', 0.03, 0.02, RAILD)
     for sx in (-1, 1): block((1.12, 0.06, 0.1), (0, sx * 0.53, H - 0.04), RAILD, 0.012)
@@ -244,6 +257,8 @@ def tunnel_frame(x, col, depth=0.14, top=BY + 0.62):
         block((depth, 0.16, top - BY + 0.06), (x, sy * 0.53, (top + BY) / 2 + 0.0), col, 0.02)
         bolt((x, sy * 0.61, BY + 0.12), 'Y' if sy > 0 else '-Y', 0.02, 0.012, 'steel')
     block((depth, 1.22, 0.14), (x, 0, top), col, 0.02)
+    for sx in (-1, 1): led_strip((0.02, 0.98, 0.02), (x + sx * (depth / 2 + 0.006), 0, top - 0.05))
+    for sy in (-1, 1): led_strip((0.02, 0.02, top - BY - 0.1), (x + depth / 2 + 0.006, sy * 0.44, (top + BY) / 2 - 0.02))
     for k in range(6): block((0.012, 0.13, top - BY - 0.12), (x, -0.36 + k * 0.145, (top + BY) / 2 + 0.02), 'rubber', 0.002)
 
 def stack_light(x, y, z):
@@ -473,7 +488,7 @@ if __name__ == '__main__':
     only = os.environ.get('ONLY')
     for name, fn in MODELS.items():
         if only and name not in only.split(','): continue
-        reset(); fn(); export(os.path.join(out, name + '.glb')); print('exported', name)
+        reset(); LEDS.clear(); fn(); finalize_leds(); export(os.path.join(out, name + '.glb')); print('exported', name)
     if prefix:
         reset()
         lay = [('fw_belt', -4.2, 1.6), ('fw_bturn', -2.8, 1.6), ('fw_bleft', -1.4, 1.6), ('fw_split', 0.0, 1.6), ('fw_merge', 1.4, 1.6), ('fw_filter', 2.8, 1.6), ('fw_sensor', 4.2, 1.6),

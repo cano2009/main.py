@@ -214,6 +214,8 @@ def dist_panel():
     for y in (0.55, 1.13, 1.7): hinge('+z', (0, y, 0.24), -0.7, 0)
     fblock('+z', (0, 1.13, 0.25), 0.62, -0.1, 0.0, 0.05, 0.22, 0.03, GRAPH, 0.008); fcyl('+z', (0, 1.13, 0.25), 0.62, 0.05, 0.03, 0.018, 0.02, 'steel', verts=10)
     fblock('+z', (0, 1.68, 0.251), 0, 0, 0.0, 1.2, 0.6, 0.012, GRAPHD, 0.006)        # screen bezel (screen at z 0.265)
+    led_strip((1.5, 0.02, 0.02), (0, -0.33, 2.03))                                 # LED under the canopy edge
+    for sx in (-1, 1): led_strip((0.02, 0.02, 1.6), (sx * 0.716, -0.235, 1.13))       # door edge accents
     fblock('+z', (0, 0.95, 0.24), 0, 0, 0.0, 1.46, 0.5, 0.012, INK, 0.0)           # breaker window, recessed
     for s in (-1, 1): fblock('+z', (0, 0.95, 0.25), 0, s * 0.255, 0.0, 1.46, 0.02, 0.02, GRAPH, 0.004)
     for i in range(5):                                                         # breaker bodies (handles and labels are the game's)
@@ -260,6 +262,7 @@ def solar():
     fblock('+z', (X, 1.15, Z + 0.1), 0, 0, 0.0, 0.5, 0.6, 0.006, WHITED, 0.004); seam('+z', (X, 1.15, Z + 0.106), 0.5, 0.6)
     fblock('+z', (X, 1.3, Z + 0.106), 0, 0, 0.0, 0.34, 0.2, 0.004, INK, 0.003)        # screen bezel
     grille('+z', (X, 0.92, Z + 0.106), 0.42, 0.12, 4, WHITED, INK, GRAPH)
+    led_strip((0.46, 0.012, 0.016), (X, -(Z + 0.108), 1.44))                        # status stripe on the inverter
     for k in range(7): gb(0.012, 0.56, 0.06, X - 0.21 + k * 0.07, 1.15, Z - 0.13, GRAPH, 0.002)   # heatsink fins at the back
     gb(0.64, 0.04, 0.34, X, 1.53, Z + 0.02, GRAPH, 0.01)                        # canopy
     gb(0.14, 0.18, 0.1, X + 0.38, 1.0, Z, GRAPH, 0.015)                          # DC isolator
@@ -276,7 +279,7 @@ if __name__ == '__main__':
     only = os.environ.get('ONLY')
     for name, fn in MODELS.items():
         if only and name not in only.split(','): continue
-        reset(); fn(); export(os.path.join(out, name + '.glb')); print('exported', name)
+        reset(); F.LEDS.clear(); fn(); F.finalize_leds(); export(os.path.join(out, name + '.glb')); print('exported', name)
         if prefix:
             big = name in ('py_bess', 'py_solar')
             preview(f'{prefix}_{name}.png', cam_loc=(5.5, -7.5, 4.6) if big else (2.6, -3.6, 2.6), target=(0.3 if name == 'py_solar' else 0, 0, 1.1), lens=38, size=(900, 700))

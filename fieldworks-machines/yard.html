@@ -270,7 +270,36 @@ rain.frustumCulled = false; rain.visible = false; scene.add(rain);
 // ---------- terrain, nature, field ----------
 const ground = terrain({ size: 260, seg: 110, flatR: 34, paths: [(x) => 0.5 + x * 0.02] });
 scene.add(ground);
-const yardPad = new THREE.Mesh(new THREE.PlaneGeometry(34, 26).rotateX(-Math.PI / 2), Y.flat('#9e978a', { roughness: 0.95 }));
+// yard floor: poured concrete in 3 m slabs with saw-cut joints, wear and stains, painted walkways and hazard borders
+// around the power equipment (the canvas covers the whole pad: x -19..15, z -20.5..5.5, 48 px per metre)
+function yardFloor() {
+  const X0 = -19, Z0 = -20.5, W = 34, D = 26, K = 48, c = document.createElement('canvas'); c.width = W * K; c.height = D * K;
+  const g = c.getContext('2d'), P = (x, z) => [(x - X0) * K, (z - Z0) * K];
+  let sd = 5; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+  g.fillStyle = '#a49d91'; g.fillRect(0, 0, c.width, c.height);
+  for (let i = 0; i < W / 3; i++) for (let j = 0; j < D / 3; j++) { const t = (rnd() - 0.5) * 14; g.fillStyle = `rgb(${164 + t},${157 + t},${145 + t})`; g.fillRect(i * 3 * K, j * 3 * K, 3 * K, 3 * K); }
+  for (let k = 0; k < 9000; k++) { const v = rnd() < 0.5 ? 0 : 255; g.fillStyle = `rgba(${v},${v},${v},${0.03 + rnd() * 0.05})`; g.fillRect(rnd() * c.width, rnd() * c.height, 1 + rnd() * 2, 1 + rnd() * 2); }
+  for (let k = 0; k < 14; k++) { const [x, y] = P(X0 + rnd() * W, Z0 + rnd() * D), r = (0.3 + rnd() * 0.9) * K, gr = g.createRadialGradient(x, y, 0, x, y, r); gr.addColorStop(0, 'rgba(60,55,48,0.16)'); gr.addColorStop(1, 'rgba(60,55,48,0)'); g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); }
+  g.strokeStyle = 'rgba(70,66,60,0.7)'; g.lineWidth = 2;
+  for (let x = 0; x <= W; x += 3) { g.beginPath(); g.moveTo(x * K, 0); g.lineTo(x * K, c.height); g.stroke(); }
+  for (let z = 0; z <= D; z += 3) { g.beginPath(); g.moveTo(0, z * K); g.lineTo(c.width, z * K); g.stroke(); }
+  // hazard borders: a band of yellow with black diagonals around each unit's footprint
+  const hazard = (cx, cz, w, d, band) => {
+    const [x0, y0] = P(cx - w / 2 - band, cz - d / 2 - band), ow = (w + 2 * band) * K, od = (d + 2 * band) * K, b = band * K;
+    g.save(); g.beginPath(); g.rect(x0, y0, ow, od); g.rect(x0 + b, y0 + b, ow - 2 * b, od - 2 * b); g.clip('evenodd');
+    g.fillStyle = '#e8b923'; g.fillRect(x0, y0, ow, od); g.fillStyle = '#1e2124';
+    for (let t = -od; t < ow; t += b * 1.4) { g.beginPath(); g.moveTo(x0 + t, y0 + od); g.lineTo(x0 + t + b * 0.7, y0 + od); g.lineTo(x0 + t + b * 0.7 + od, y0); g.lineTo(x0 + t + od, y0); g.fill(); }
+    g.restore();
+  };
+  hazard(-8, -9.5, 2.0, 1.6, 0.32); hazard(-1.2, -11.2, 7.0, 2.7, 0.32); hazard(-1.2, -7.2, 1.9, 1.0, 0.25); hazard(5.5, -9.2, 3.0, 1.8, 0.3);
+  // walkways: twin yellow lines along the front of the power yard and across to the tank
+  g.fillStyle = '#e8b923';
+  [[-12, -4.6, 10, -4.6], [-12, -3.4, 10, -3.4]].forEach(([xa, za, xb]) => { const [x, y] = P(xa, za); g.fillRect(x, y - 3, (xb - xa) * K, 6); });
+  for (let x = -11.5; x < 10; x += 1.2) { const [px, py] = P(x, -4.0); g.fillStyle = 'rgba(240,236,226,0.85)'; g.fillRect(px, py - 2, 0.6 * K, 4); }
+  const tex = new THREE.CanvasTexture(c); tex.encoding = THREE.sRGBEncoding; tex.anisotropy = 8;
+  const m = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.88, metalness: 0 }); m.userData.lowpoly = true; return m;
+}
+const yardPad = new THREE.Mesh(new THREE.PlaneGeometry(34, 26).rotateX(-Math.PI / 2), yardFloor());
 yardPad.position.set(-2, 0.012, -7.5); yardPad.receiveShadow = true; scene.add(yardPad);
 // merge static decoration by material: one draw call per material, outlined as one hull
 function mergeByMaterial(group) {
@@ -492,7 +521,29 @@ reg(chu, [PO('in', 'conveyor', 'in', [-0.85, 0.72, 0], [1, 0, 0], { socket: fals
 reg(pal, [PO('in', 'conveyor', 'in', [0.53, 0.2, 0], chu.dirOut.clone().negate().toArray(), { socket: false, label: 'Pallet drop zone' })], 'Pallet');
 const net = PT.createNetwork(), find = PT.find;
 // buried runs draw only the risers where they enter and leave the ground: the run itself is out of sight in a duct
-const lay = (pa, pb, da, db, h, r, mat, parent) => { const pts = PT.groundRoute(pa, pb, da, db, h); if (!(h < 0) || pts.length < 6) return PT.tubePath(pts, r, mat, parent); const g = new THREE.Group(); parent.add(g); PT.tubePath(pts.slice(0, 3), r, mat, g); PT.tubePath(pts.slice(-3), r, mat, g); return g; };
+// cable trays: power cables on the ground run square to the yard, out of the socket, along one axis, then the other,
+// in a galvanised ladder tray on stands (one merged mesh per run)
+const TRAY_M = Y.flat('#a4abb0', { roughness: 0.42, metalness: 0.55 });
+function trayAlong(pts, parent) {
+  const geos = [], m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), one = new V(1, 1, 1), up = new V(0, 1, 0);
+  const bx = (w, h, d, x, y, z, yaw) => { const g = new THREE.BoxGeometry(w, h, d); q.setFromAxisAngle(up, yaw); m4.compose(new V(x, y, z), q, one); g.applyMatrix4(m4); geos.push(g); };
+  for (let i = 0; i < pts.length - 1; i++) {
+    const a = pts[i], b = pts[i + 1], dx = b.x - a.x, dz = b.z - a.z, L = Math.hypot(dx, dz); if (L < 0.25 || Math.abs(a.y - b.y) > 0.02) continue;
+    const yaw = Math.atan2(-dz, dx), ux = dx / L, uz = dz / L, px = -uz, pz = ux, y = a.y - 0.04, cx = (a.x + b.x) / 2, cz = (a.z + b.z) / 2;
+    [-1, 1].forEach((sd) => bx(L + 0.28, 0.07, 0.02, cx + px * sd * 0.13, y + 0.025, cz + pz * sd * 0.13, yaw));     // side rails, overlapping at corners
+    for (let t = 0.12; t < L; t += 0.3) bx(0.03, 0.012, 0.26, a.x + ux * t, y - 0.006, a.z + uz * t, yaw);          // rungs
+    for (let t = 0.5; t < L; t += 1.6) { bx(0.035, y - 0.012, 0.035, a.x + ux * t, (y - 0.012) / 2, a.z + uz * t, yaw); bx(0.12, 0.012, 0.32, a.x + ux * t, 0.006, a.z + uz * t, yaw); }   // stands
+  }
+  if (!geos.length) return null;
+  const mesh = new THREE.Mesh(mergeBufferGeometries(geos, false), TRAY_M); mesh.castShadow = true; mesh.receiveShadow = true; parent.add(mesh); return mesh;
+}
+const lay = (pa, pb, da, db, h, r, mat, parent) => {
+  if (mat === Y.C.black && !(h < 0)) {
+    const hh = 0.12, a1 = pa.clone().addScaledVector(da, 0.12), b1 = pb.clone().addScaledVector(db, 0.12), xFirst = Math.abs(b1.x - a1.x) >= Math.abs(b1.z - a1.z);
+    const c = xFirst ? new V(b1.x, hh, a1.z) : new V(a1.x, hh, b1.z), pts = [pa, a1, new V(a1.x, hh, a1.z), c, new V(b1.x, hh, b1.z), b1, pb];
+    const g = new THREE.Group(); parent.add(g); PT.tubePath(pts, r, mat, g); trayAlong(pts.slice(2, 5), g); return g;
+  }
+  const pts = PT.groundRoute(pa, pb, da, db, h); if (!(h < 0) || pts.length < 6) return PT.tubePath(pts, r, mat, parent); const g = new THREE.Group(); parent.add(g); PT.tubePath(pts.slice(0, 3), r, mat, g); PT.tubePath(pts.slice(-3), r, mat, g); return g; };
 const cable = (a, b, h) => net.link(a, b, 'cable', (pa, pb, da, db) => lay(pa, pb, da, db, h, 0.03, Y.C.black, wireG));
 const pipe = (a, b, r, mat, h) => net.link(a, b, 'pipe', (pa, pb, da, db) => lay(pa, pb, da, db, h === undefined ? (r || 0.06) + 0.01 : h, r || 0.06, mat || Y.C.steel, pipeG));
 const span = (a, b, sag, r, mat) => a.forEach((p, i) => net.link(p, b[i], 'wire', (pa, pb) => Y.tube(Y.catenary(pa, pb, sag), r || 0.022, mat || Y.C.black, wireG, { seg: 16, radial: 4, noOutline: true })));
@@ -1502,6 +1553,7 @@ function animateParts(dt) {
     const em = (n, k) => { if (n) n.traverse((o) => { if (o.isMesh) o.material.emissiveIntensity = o.userData.e0 * k; }); };
     if (F.beam) em(F.beam, p.blink > 0 ? 0.15 : run ? 1 : 0.05);
     if (F.beacon) em(F.beacon, p.belt.length && run ? 1 : 0.1);
+    if (F.leds) em(F.leds, !run ? 0.08 : P.use ? (p.busy ? 1 : 0.45) : 0.7);   // accent LEDs: bright while working, dim when idle, off without power
     if (F.glow) { const g = p.busy && run ? 0.85 + Math.sin(performance.now() / 140) * 0.15 : p.buf && p.buf.length ? 0.35 : 0.08; em(F.glow, g); em(F.glow2, g); }
     if (F.lamp_g) { const st = !run ? 'r' : p.busy ? 'g' : 'a'; em(F.lamp_g, st === 'g' ? 3 : 0.08); em(F.lamp_a, st === 'a' ? 3 : 0.08); em(F.lamp_r, st === 'r' ? 3 : 0.08); }
   });
@@ -1675,7 +1727,7 @@ function fwSwap(root, type, ghost) {
     if (!r) return null; r.scene.position.x = partOff(type);
     if (ghost) { r.scene.traverse((o) => { if (o.isMesh) { o.material = BUILD.ok ? ghostOK : ghostBad; o.castShadow = false; } }); return r; }
     // lamps, beams and glows change per machine: give each its own material
-    ['lamp_g', 'lamp_a', 'lamp_r', 'beam', 'glow', 'glow2', 'screen', 'beacon'].forEach((k) => { const n = r.parts[k]; if (n) n.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); o.userData.e0 = o.material.emissiveIntensity || 1; } }); });
+    ['lamp_g', 'lamp_a', 'lamp_r', 'beam', 'glow', 'glow2', 'screen', 'beacon', 'leds'].forEach((k) => { const n = r.parts[k]; if (n) n.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); o.userData.e0 = o.material.emissiveIntensity || 1; } }); });
     return r;
   });
 }
