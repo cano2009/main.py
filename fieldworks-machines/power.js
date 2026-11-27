@@ -41,12 +41,17 @@ export const SIDES = ['E', 'S', 'W', 'N'];
 const DIR = { E: [1, 0], S: [0, 1], W: [-1, 0], N: [0, -1] };
 const OPP = { E: 'W', W: 'E', N: 'S', S: 'N' };
 export const turn = (side, r) => SIDES[(SIDES.indexOf(side) + r) % 4];
-const HS = 0.62, HH = 0.32, BY = 0.8;   // shaft height, hose height, belt height
+const HS = 0.62, HH = 0.32; export const BY = 0.55;   // shaft height, hose height, belt height
 export const MATS = {
   grain: { name: 'Raw grain', buy: 0.5 }, meal: { name: 'Grain meal', sell: 1.4 },
   straw: { name: 'Loose straw', buy: 0.25 }, bale: { name: 'Straw bale', sell: 1.2 },
-  log: { name: 'Log', buy: 1.0 }, firewood: { name: 'Firewood bundle', sell: 2.7 }
+  log: { name: 'Log', buy: 1.0 }, firewood: { name: 'Firewood bundle', sell: 2.7 },
+  plank: { name: 'Plank', sell: 1.5 }, stone: { name: 'Stone block', buy: 0.35 }, brick: { name: 'Cut brick', sell: 1.0 },
+  ore: { name: 'Iron ore', buy: 0.8 }, ingot: { name: 'Iron ingot', sell: 3.9 }, crate: { name: 'Packed crate', sell: 0 }
 };
+export const BIN_MATS = ['grain', 'straw', 'log', 'stone', 'ore'];
+// conveyor parts: items ride from the side they entered to the side the part sends them (local sides)
+export const CONV = new Set(['belt', 'bturn', 'bleft', 'split', 'merge', 'filter', 'sensor']);
 // ports: [side, type, io, group]. group: parts with internal shaft links say how speed changes between ports (ratio).
 export const PARTS = {
   motor: { name: 'Electric motor', cat: 'mech', price: 1400, ports: [['E', 'shaft', 'out']], src: { kw: 5.5, rpm: 1500, electric: true }, note: '5.5 kW at 1,500 rpm from the yard network' },
@@ -65,7 +70,16 @@ export const PARTS = {
   valve: { name: 'Valve', cat: 'hyd', price: 260, ports: [['W', 'hyd', 'both'], ['E', 'hyd', 'both']], toggle: 'open', note: 'Open or close to connect or isolate' },
   accum: { name: 'Accumulator', cat: 'hyd', price: 900, ports: [['W', 'hyd', 'both'], ['E', 'hyd', 'both']], store: 8, note: 'Stores 8 L of oil under pressure for peaks' },
   belt: { name: 'Belt', cat: 'belt', price: 180, ports: [['W', 'item', 'in'], ['E', 'item', 'out']], note: 'Carries units from the west end to the east end' },
-  bturn: { name: 'Belt corner', cat: 'belt', price: 260, ports: [['W', 'item', 'in'], ['S', 'item', 'out']], note: 'Turns units from west to south' },
+  bturn: { name: 'Right turn belt', cat: 'belt', price: 260, ports: [['W', 'item', 'in'], ['S', 'item', 'out']], note: 'Turns units to the right' },
+  bleft: { name: 'Left turn belt', cat: 'belt', price: 260, ports: [['W', 'item', 'in'], ['N', 'item', 'out']], note: 'Turns units to the left' },
+  split: { name: 'Splitter', cat: 'belt', price: 650, ports: [['W', 'item', 'in'], ['N', 'item', 'out'], ['S', 'item', 'out']], note: 'Sends units left and right in turn; if one side is blocked, all go the other way' },
+  merge: { name: 'Merger', cat: 'belt', price: 650, ports: [['W', 'item', 'in'], ['N', 'item', 'in'], ['S', 'item', 'in'], ['E', 'item', 'out']], note: 'Joins up to three belts into one' },
+  filter: { name: 'Filter', cat: 'belt', price: 900, ports: [['W', 'item', 'in'], ['E', 'item', 'out'], ['S', 'item', 'out']], toggle: 'filter', note: 'Sends the chosen material to the right, everything else straight on' },
+  sensor: { name: 'Belt sensor', cat: 'belt', price: 420, ports: [['W', 'item', 'in'], ['E', 'item', 'out']], note: 'A light curtain that counts every unit that passes' },
+  sawmill: { name: 'Band sawmill', cat: 'machine', len: 2, price: 3400, ports: [['W', 'item', 'in', 0], ['E', 'item', 'out', 1]], use: { electric: true, kw: 2.2 }, recipe: ['log', 'plank', 1, 2], t: 2.6, note: 'One log into two planks. 2.2 kW from the yard network' },
+  stonecutter: { name: 'Stone cutter', cat: 'machine', len: 2, price: 3800, ports: [['W', 'item', 'in', 0], ['E', 'item', 'out', 1]], use: { electric: true, kw: 2.6 }, recipe: ['stone', 'brick', 1, 3], t: 3.2, note: 'One block into three cut bricks, water-cooled. 2.6 kW' },
+  smelter: { name: 'Ore smelter', cat: 'machine', len: 2, price: 5200, ports: [['W', 'item', 'in', 0], ['E', 'item', 'out', 1]], use: { electric: true, kw: 4.5 }, recipe: ['ore', 'ingot', 2, 1], t: 5, note: 'Two ore into one iron ingot. 4.5 kW induction furnace' },
+  packer: { name: 'Crate packer', cat: 'machine', len: 2, price: 2900, ports: [['W', 'item', 'in', 0], ['E', 'item', 'out', 1]], use: { electric: true, kw: 0.9 }, recipe: ['*', 'crate', 4, 1], t: 2.2, note: 'Packs four of the same product into a crate worth 25% more. 0.9 kW' },
   bin: { name: 'Supply bin', cat: 'belt', price: 500, ports: [['E', 'item', 'out']], bin: true, note: 'Holds bought material and feeds it out of the east side' },
   mill: { name: 'Hammer mill', cat: 'machine', price: 2600, ports: [['W', 'shaft', 'in'], ['N', 'item', 'in'], ['S', 'item', 'out']], use: { shaft: true, kw: 4, rpm: [900, 2400] }, recipe: ['grain', 'meal'], t: 2.4, note: 'Grain → meal. Needs 4 kW on its shaft at 900–2,400 rpm' },
   baler: { name: 'Hydraulic baler', cat: 'machine', price: 3200, ports: [['W', 'hyd', 'in'], ['N', 'item', 'in'], ['S', 'item', 'out']], use: { hyd: true, bar: 150, flow: 25 }, recipe: ['straw', 'bale'], t: 3.0, note: 'Straw → bales. Needs 150 bar and 25 L/min' },
@@ -226,6 +240,12 @@ export function itemMesh(m) {
       : m === 'straw' ? [new THREE.DodecahedronGeometry(0.12, 0).translate(0, 0.08, 0), M.hay]
       : m === 'bale' ? [new THREE.BoxGeometry(0.42, 0.22, 0.26).translate(0, 0.11, 0), M.hay]
       : m === 'grain' ? [new THREE.CylinderGeometry(0.1, 0.13, 0.12, 8).translate(0, 0.06, 0), M.grain]
+      : m === 'plank' ? [new THREE.BoxGeometry(0.5, 0.05, 0.16).translate(0, 0.025, 0), mat('#d9b27a')]
+      : m === 'stone' ? [new THREE.DodecahedronGeometry(0.15, 0).scale(1.2, 0.8, 1).translate(0, 0.11, 0), mat('#9a958c')]
+      : m === 'brick' ? [new THREE.BoxGeometry(0.26, 0.1, 0.13).translate(0, 0.05, 0), mat('#b9b2a5')]
+      : m === 'ore' ? [new THREE.IcosahedronGeometry(0.13, 0).translate(0, 0.1, 0), mat('#7a5a4a')]
+      : m === 'ingot' ? [new THREE.CylinderGeometry(0.07, 0.11, 0.3, 4, 1).rotateY(Math.PI / 4).rotateZ(Math.PI / 2).scale(1, 0.55, 1).translate(0, 0.05, 0), mat('#b8c0c6', { metalness: 0.5, roughness: 0.35 })]
+      : m === 'crate' ? [new THREE.BoxGeometry(0.34, 0.26, 0.3).translate(0, 0.13, 0), mat('#b0834f')]
       : [new THREE.BoxGeometry(0.26, 0.14, 0.2).translate(0, 0.07, 0), M.sack];
   }
   const me = new THREE.Mesh(IG[m][0], IG[m][1]); me.castShadow = true; return me;
@@ -239,16 +259,19 @@ export class PartGrid {
   at(i, j) { return this.cells.get(this.key(i, j)) || null; }
   note(t) { this.log.unshift({ t: this.time, text: t }); this.log.length = Math.min(this.log.length, 12); }
   add(type, i, j, r, st) {
-    const P = PARTS[type]; const p = { id: this.nextId++, type, i, j, r: r || 0, on: true, engaged: true, open: true, supply: 0, mat: P.bin ? 'grain' : null, fuel: P.src && P.src.fuel ? 40 : 0, buf: [], out: [], belt: [], t: 0, stored: 0, made: 0, sold: 0, palletN: 0, palletV: 0 };
+    const P = PARTS[type]; const p = { id: this.nextId++, type, i, j, r: r || 0, on: true, engaged: true, open: true, supply: 0, mat: P.bin ? 'grain' : null, fmat: P.toggle === 'filter' ? 'log' : null, fuel: P.src && P.src.fuel ? 40 : 0, buf: [], out: [], belt: [], t: 0, stored: 0, made: 0, sold: 0, palletN: 0, palletV: 0 };
     if (st) Object.assign(p, st);
-    this.parts.push(p); this.cells.set(this.key(i, j), p); this.solve(); return p;
+    this.parts.push(p); this.footprint(p).forEach(([a, b]) => this.cells.set(this.key(a, b), p)); this.solve(); return p;
   }
-  remove(p) { this.parts = this.parts.filter((q) => q !== p); this.cells.delete(this.key(p.i, p.j)); this.solve(); }
-  // world side of a port, and the neighbouring part's matching port
-  ports(p) { return PARTS[p.type].ports.map(([side, type, io], k) => ({ p, k, side: turn(side, p.r), type, io })); }
+  remove(p) { this.parts = this.parts.filter((q) => q !== p); this.footprint(p).forEach(([a, b]) => this.cells.delete(this.key(a, b))); this.solve(); }
+  // the cells a part covers: long machines run along their local x (east)
+  static cellsOf(type, i, j, r) { const n = PARTS[type].len || 1, [dx, dz] = DIR[turn('E', r || 0)]; return Array.from({ length: n }, (_, k) => [i + dx * k, j + dz * k]); }
+  footprint(p) { return PartGrid.cellsOf(p.type, p.i, p.j, p.r); }
+  // world side of a port, the cell it sits on, and the neighbouring part's matching port
+  ports(p) { const [dx, dz] = DIR[turn('E', p.r)]; return PARTS[p.type].ports.map(([side, type, io, off], k) => ({ p, k, side: turn(side, p.r), type, io, ci: p.i + dx * (off || 0), cj: p.j + dz * (off || 0) })); }
   peer(port) {
-    const [di, dj] = DIR[port.side], q = this.at(port.p.i + di, port.p.j + dj); if (!q) return null;
-    const qp = this.ports(q).find((x) => x.side === OPP[port.side] && x.type === port.type); if (!qp) return null;
+    const [di, dj] = DIR[port.side], q = this.at(port.ci + di, port.cj + dj); if (!q || q === port.p) return null;
+    const qp = this.ports(q).find((x) => x.side === OPP[port.side] && x.type === port.type && x.ci + DIR[x.side][0] === port.ci && x.cj + DIR[x.side][1] === port.cj); if (!qp) return null;
     if (port.type === 'item' && !((port.io === 'out' && qp.io === 'in') || (port.io === 'in' && qp.io === 'out'))) return null;
     if (port.type === 'shaft' && ((port.io === 'out' && qp.io === 'out') || (port.io === 'in' && qp.io === 'in'))) return { bad: true, q, qp };
     return { q, qp };
@@ -351,36 +374,92 @@ export class PartGrid {
     this.parts.forEach((p) => {
       const P = PARTS[p.type]; if (!P.use) return;
       let f = p.f || 0;
+      if (P.use.electric) { f = env.powered && p.on ? 1 : 0; p.why = !env.powered ? 'No yard power' : null; gridKw += p.busy && f ? P.use.kw : 0.08; }
       if (P.use.shaft) { const [lo, hi] = P.use.rpm; if (p.rpm > hi) { f = 0; p.why = `Overspeed: ${Math.round(p.rpm)} rpm, its limit is ${hi}`; } else if (p.rpm < lo) { f *= p.rpm / lo; p.why = p.rpm > 0 ? `Too slow: ${Math.round(p.rpm)} rpm, it needs ${lo}` : null; } else p.why = null; }
       p.speed = f;
       // hydraulic machines eject the finished unit and reload between strokes (no oil used then: accumulators refill)
       if (p.rest > 0) p.rest -= dt;
-      if (!p.busy && !(p.rest > 0) && p.buf.length && p.out.length < 4) { p.busy = true; p.t = P.t; p.cur = p.buf.shift(); }
-      if (p.busy) { p.t -= dt * f; if (p.t <= 0) { p.busy = false; p.out.push({ id: this.items++, mat: P.recipe[1] }); p.made++; if (P.use.hyd) p.rest = 2.0; } }
+      const need = P.recipe[2] || 1, make = P.recipe[3] || 1;
+      if (!p.busy && !(p.rest > 0) && p.buf.length >= need && p.out.length < 4) { p.busy = true; p.t = P.t; p.cur = p.buf.splice(0, need); }
+      if (p.busy) {
+        p.t -= dt * f;
+        if (p.t <= 0) {
+          p.busy = false; p.made++; if (P.use.hyd) p.rest = 2.0;
+          const val = p.cur.reduce((a, it) => a + (it.val || MATS[it.mat].sell || MATS[it.mat].buy || 0), 0);
+          for (let k = 0; k < make; k++) p.out.push(P.recipe[1] === 'crate' ? { id: this.items++, mat: 'crate', inside: p.cur[0].mat, val: val * 1.25 } : { id: this.items++, mat: P.recipe[1] });
+          p.cur = null;
+        }
+      }
     });
-    // belts and transfers
-    const speed = env.powered ? 0.5 : 0; this.beltSpeed = speed;
-    const accepts = (q, side, mat) => { // can part q take an item entering through its world side `side`?
-      const pt = this.ports(q).find((x) => x.type === 'item' && x.io === 'in' && x.side === side); if (!pt) return false;
-      if (q.type === 'belt' || q.type === 'bturn') return !q.belt.length || q.belt[q.belt.length - 1].p >= 0.34;
-      if (PARTS[q.type].use) return q.buf.length < 4 && mat === PARTS[q.type].recipe[0];
-      if (q.type === 'pallet') return true;
-      return false;
+    // belts and transfers. Conveyor items carry the local side they came in by (from), the side they leave by (to)
+    // and their progress p (0..1) along that path; spacing keeps them 0.34 of a cell apart.
+    const speed = env.powered ? 0.55 : 0; this.beltSpeed = speed;
+    const local = (q, worldSide) => SIDES[(SIDES.indexOf(worldSide) - q.r + 4) % 4];
+    const inPort = (q, side) => this.ports(q).find((x) => x.type === 'item' && x.io === 'in' && x.side === side);
+    const accepts = (q, side, it) => { // can part q take this unit entering through its world side `side`?
+      if (!inPort(q, side)) return false;
+      if (CONV.has(q.type)) return !q.belt.some((o) => o.p < 0.36);
+      const P = PARTS[q.type];
+      if (P.use) {
+        const need = P.recipe[2] || 1;
+        if (P.recipe[0] === '*') return it.mat !== 'crate' && q.buf.length < need * 2 && (!q.buf.length || q.buf[0].mat === it.mat) && (!q.cur || q.cur[0].mat === it.mat || !q.buf.length);
+        return q.buf.length < Math.max(4, need * 2) && it.mat === P.recipe[0];
+      }
+      return q.type === 'pallet';
     };
-    const give = (q, it) => { if (q.type === 'belt' || q.type === 'bturn') { it.p = 0; q.belt.push(it); } else if (q.type === 'pallet') { q.palletN++; q.palletV += MATS[it.mat].sell || (MATS[it.mat].buy || 0) * 0.5; this.sold[it.mat] = (this.sold[it.mat] || 0) + 1; } else q.buf.push(it); };
-    const outPeer = (p) => { const pt = this.ports(p).find((x) => x.type === 'item' && x.io === 'out'); if (!pt) return null; const [di, dj] = DIR[pt.side], q = this.at(p.i + di, p.j + dj); return q ? { q, side: OPP[pt.side] } : null; };
+    const routeOut = (q, it) => {
+      const T = q.type;
+      if (T === 'bturn') return 'S'; if (T === 'bleft') return 'N';
+      if (T === 'filter') return it.mat === q.fmat ? 'S' : 'E';
+      if (T === 'split') { const a = q.flip ? 'S' : 'N'; q.flip = !q.flip; return a; }
+      return 'E';
+    };
+    const give = (q, it, worldSide) => {
+      if (CONV.has(q.type)) { it.p = 0; it.from = local(q, worldSide); it.to = routeOut(q, it); q.belt.push(it); return; }
+      if (q.type === 'pallet') { q.palletN++; const v = it.val || MATS[it.mat].sell || (MATS[it.mat].buy || 0) * 0.5; q.palletV += v; this.sold[it.mat] = (this.sold[it.mat] || 0) + 1; return; }
+      q.buf.push(it);
+    };
+    // the neighbour across a local side of part p (for long parts the port says which cell)
+    const across = (p, lside) => { const pt = this.ports(p).find((x) => x.type === 'item' && x.io === 'out' && x.side === turn(lside, p.r)); if (!pt) return null; const [di, dj] = DIR[pt.side], q = this.at(pt.ci + di, pt.cj + dj); return q && q !== p ? { q, side: OPP[pt.side] } : null; };
+    const outPeer = (p) => { const pt = this.ports(p).find((x) => x.type === 'item' && x.io === 'out'); return pt ? across(p, SIDES[(SIDES.indexOf(pt.side) - p.r + 4) % 4]) : null; };
     this.parts.forEach((p) => {
-      if (p.type === 'belt' || p.type === 'bturn') {
-        for (let k = 0; k < p.belt.length; k++) { const it = p.belt[k], lim = k === 0 ? 1 : p.belt[k - 1].p - 0.34; it.p = Math.min(lim, it.p + speed * dt / CELL); }
-        if (p.belt.length && p.belt[0].p >= 1) { const o = outPeer(p); if (o && accepts(o.q, o.side, p.belt[0].mat)) give(o.q, p.belt.shift()); }
+      if (CONV.has(p.type)) {
+        p.belt.sort((a, b) => b.p - a.p);
+        for (let k = 0; k < p.belt.length; k++) {
+          const it = p.belt[k], lim = k === 0 ? 1 : p.belt[k - 1].p - 0.34;
+          // a splitter picks its side at the centre: the other side if this one is blocked
+          if (p.type === 'split' && it.p < 0.5 && Math.min(lim, it.p + speed * dt / CELL) >= 0.5) { const o = across(p, it.to); if (!o || !accepts(o.q, o.side, it)) { const alt = it.to === 'N' ? 'S' : 'N', o2 = across(p, alt); if (o2 && accepts(o2.q, o2.side, it)) it.to = alt; } }
+          it.p = Math.max(it.p, Math.min(lim, it.p + speed * dt / CELL));
+        }
+        const h = p.belt[0];
+        if (h && h.p >= 1) { const o = across(p, h.to); if (o && accepts(o.q, o.side, h)) { give(o.q, p.belt.shift(), o.side); if (p.type === 'sensor') { p.count = (p.count || 0) + 1; p.blink = 0.4; } } }
+        if (p.blink > 0) p.blink -= dt;
       } else if (p.type === 'bin') {
         p.cool = (p.cool || 0) - dt;
-        if (p.supply >= 1 && p.cool <= 0) { const o = outPeer(p); if (o && accepts(o.q, o.side, p.mat)) { give(o.q, { id: this.items++, mat: p.mat }); p.supply -= 1; p.cool = 1.4; } }
-      } else if (PARTS[p.type].use && p.out.length) { const o = outPeer(p); if (o && accepts(o.q, o.side, p.out[0].mat)) give(o.q, p.out.shift()); }
+        if (p.supply >= 1 && p.cool <= 0) { const o = outPeer(p), it = { id: this.items++, mat: p.mat }; if (o && accepts(o.q, o.side, it)) { give(o.q, it, o.side); p.supply -= 1; p.cool = 1.4; } }
+      } else if (PARTS[p.type].use && p.out.length) { const o = outPeer(p); if (o && accepts(o.q, o.side, p.out[0])) give(o.q, p.out.shift(), o.side); }
       else if (p.type === 'pallet' && p.palletN >= 20) { earned += p.palletV; this.earned += p.palletV; this.note(`Pallet sold: ${p.palletN} units for $${p.palletV.toFixed(0)}`); p.sold += p.palletN; p.palletN = 0; p.palletV = 0; }
     });
-    gridKw += this.parts.filter((p) => p.type === 'belt' || p.type === 'bturn').length * 0.12;
+    gridKw += this.parts.filter((p) => CONV.has(p.type)).length * 0.12;
     return { kw: gridKw, earned };
+  }
+  // what to draw on a part: [{ it, x, y, z }] in the part's local frame (x east along its length, z south)
+  visItems(p) {
+    const SP = { E: [0.6, 0], W: [-0.6, 0], N: [0, -0.6], S: [0, 0.6] }, out = [];
+    if (CONV.has(p.type)) p.belt.forEach((it) => { const a = SP[it.from] || SP.W, b = SP[it.to] || SP.E, t = it.p; const [x, z] = t < 0.5 ? [a[0] * (1 - t * 2), a[1] * (1 - t * 2)] : [b[0] * (t - 0.5) * 2, b[1] * (t - 0.5) * 2]; out.push({ it, x, y: BY, z }); });
+    else if (PARTS[p.type].use) {
+      const L = (PARTS[p.type].len || 1) * CELL / 2;
+      if (PARTS[p.type].len) { (p.buf || []).slice(0, 2).forEach((it, k) => out.push({ it, x: -L + 0.25 + k * 0.32, y: BY, z: 0 })); if (p.busy && p.cur) out.push({ it: p.cur[0], x: -0.1 + (1 - Math.max(0, p.t) / PARTS[p.type].t) * 0.3, y: BY, z: 0 }); if (p.out[0]) out.push({ it: p.out[0], x: L - 0.25, y: BY, z: 0 }); }
+      else if (p.out[0]) out.push({ it: p.out[0], x: 0.1, y: BY, z: 0.45 });
+    }
+    return out;
+  }
+  // is there a part past this conveyor's exit that could ever take this unit (a busy machine is just a queue)
+  nextTakes(p, it) {
+    const pt = this.ports(p).find((x) => x.type === 'item' && x.io === 'out' && x.side === turn(it.to || 'E', p.r)); if (!pt) return false;
+    const [di, dj] = DIR[pt.side], q = this.at(pt.ci + di, pt.cj + dj); if (!q || q === p) return false;
+    if (!this.ports(q).some((x) => x.type === 'item' && x.io === 'in' && x.side === OPP[pt.side])) return false;
+    const R = PARTS[q.type].recipe; return !R || R[0] === '*' || R[0] === it.mat;
   }
   // engineering check of the whole build: open ends, clashes, drives fighting, speeds, pressures
   diagnose() {
@@ -403,8 +482,9 @@ export class PartGrid {
       if (P.use && P.use.shaft && p.why) add('warn', `${at(p)}: ${p.why}`, p.rpm > P.use.rpm[1] ? 'Put a reduction gearbox before it' : 'Speed it up with a step-up gearbox, or use a faster drive');
       if (p.type === 'bin' && p.supply < 1) add('info', `${at(p)}: empty`, 'Buy a load of ' + MATS[p.mat].name.toLowerCase());
       if (P.src && P.src.fuel && p.fuel < 4) add('warn', `${at(p)}: out of diesel`, 'Refuel it');
-      if (P.use) { const o = this.ports(p).find((x) => x.type === 'item' && x.io === 'out'); const [di, dj] = DIR[o.side]; if (!this.at(p.i + di, p.j + dj)) add('warn', `${at(p)}: nothing takes its output`, 'Run a belt to a sales pallet'); }
-      if ((p.type === 'belt' || p.type === 'bturn') && p.belt.length && p.belt[0].p >= 1) { const o = this.ports(p).find((x) => x.io === 'out'); const [di, dj] = DIR[o.side]; const q = this.at(p.i + di, p.j + dj); if (!q) add('warn', `${at(p)}: units pile up at the end of the belt`, 'Continue the belt to a machine or a pallet'); }
+      if (P.use) { const o = this.ports(p).find((x) => x.type === 'item' && x.io === 'out'); const [di, dj] = DIR[o.side]; if (!this.at(o.ci + di, o.cj + dj)) add('warn', `${at(p)}: nothing takes its output`, 'Run a belt to a sales pallet'); }
+      if (P.use && P.use.electric && p.why) add('warn', `${at(p)}: ${p.why}`, 'Check the yard power network');
+      if (CONV.has(p.type) && p.belt.length && p.belt[0].p >= 1 && !this.nextTakes(p, p.belt[0])) add('warn', `${at(p)}: units are waiting at the end of the belt`, 'Continue the belt to a machine or a pallet, or check that the next part takes this material');
     });
     return out;
   }

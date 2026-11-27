@@ -159,7 +159,7 @@ dd { margin: 0; text-align: right; font-family: var(--font-mono); font-size: 13p
       <button type="button" class="chip" data-part="pack">Power pack</button><button type="button" class="chip" data-part="pump">Hydraulic pump</button><button type="button" class="chip" data-part="hose">Hose</button><button type="button" class="chip" data-part="corner">Hose corner</button><button type="button" class="chip" data-part="tee">Hose tee</button><button type="button" class="chip" data-part="valve">Valve</button><button type="button" class="chip" data-part="accum">Accumulator</button>
     </div>
     <div class="chips" role="group" aria-label="Belts and machines"><span class="label">Belts and machines</span>
-      <button type="button" class="chip" data-part="belt">Belt</button><button type="button" class="chip" data-part="bturn">Belt corner</button><button type="button" class="chip" data-part="bin">Supply bin</button><button type="button" class="chip" data-part="mill">Hammer mill</button><button type="button" class="chip" data-part="baler">Baler</button><button type="button" class="chip" data-part="splitter">Log splitter</button><button type="button" class="chip" data-part="pallet">Sales pallet</button><button type="button" class="chip" data-part="remove">Remove parts</button>
+      <button type="button" class="chip" data-part="belt">Belt</button><button type="button" class="chip" data-part="bturn">Right turn</button><button type="button" class="chip" data-part="bleft">Left turn</button><button type="button" class="chip" data-part="split">Splitter</button><button type="button" class="chip" data-part="merge">Merger</button><button type="button" class="chip" data-part="filter">Filter</button><button type="button" class="chip" data-part="sensor">Sensor</button><button type="button" class="chip" data-part="sawmill">Band sawmill</button><button type="button" class="chip" data-part="stonecutter">Stone cutter</button><button type="button" class="chip" data-part="smelter">Ore smelter</button><button type="button" class="chip" data-part="packer">Crate packer</button><button type="button" class="chip" data-part="bin">Supply bin</button><button type="button" class="chip" data-part="mill">Hammer mill</button><button type="button" class="chip" data-part="baler">Baler</button><button type="button" class="chip" data-part="splitter">Log splitter</button><button type="button" class="chip" data-part="pallet">Sales pallet</button><button type="button" class="chip" data-part="remove">Remove parts</button>
     </div>
     <div class="chips" role="group" aria-label="Game"><span class="label">Game</span>
       <button type="button" class="chip" id="save-now">Save</button><button type="button" class="chip" id="new-game">New farm</button>
@@ -1010,6 +1010,8 @@ const partsSim = {
     if (P.src) return !pgrid.running(p, { wind: env.wind, powered: grid.powered.line }) ? (P.src.wind ? `Wind ${env.wind.toFixed(1)} m/s: ${env.wind < 2.5 ? 'too calm' : 'furled in the storm'}` : !p.on ? 'Switched off' : P.src.fuel ? 'Out of diesel' : 'No yard power') : `Driving ${(p.loadKw || 0).toFixed(1)} of ${pgrid.srcKw(p, { wind: env.wind, powered: true }).toFixed(1)} kW`;
     if (P.use) return p.why || (p.busy ? `Working at ${Math.round((p.speed || 0) * 100)}% speed` : p.buf.length ? 'Ready' : `Waiting for ${PW.MATS[P.recipe[0]].name.toLowerCase()}`);
     if (p.type === 'bin') return `${Math.floor(p.supply)} ${PW.MATS[p.mat].name.toLowerCase()} left`;
+    if (p.type === 'sensor') return `${p.count || 0} units counted`;
+    if (p.type === 'filter') return `Sends ${PW.MATS[p.fmat].name.toLowerCase()} to the right, the rest straight on`;
     if (p.type === 'pallet') return `${p.palletN} of 20 units, $${p.palletV.toFixed(0)}`;
     if (n.hyd) return n.hyd.leak ? 'Open hose end on this line: no pressure' : `${Math.round(n.hyd.bar || 0)} bar, ${(n.hyd.flow || 0).toFixed(1)} L/min`;
     if (n.shaft) { const pt = pgrid.ports(p).find((x) => x.type === 'shaft'); const r = n.shaft.rpm && pt ? n.shaft.rpm.get(p.id + ':' + pt.k) || 0 : 0; return n.shaft.conflict ? 'Drives fighting on this line' : `${Math.round(r)} rpm, ${(n.shaft.supply || 0).toFixed(1)} kW on the line`; }
@@ -1017,7 +1019,7 @@ const partsSim = {
   },
   panel() {
     const p = this.sel && pgrid.parts.includes(this.sel) ? this.sel : null, all = pgrid.parts;
-    const nets = `${pgrid.nets.shaft.length} shaft lines, ${pgrid.nets.hyd.length} hydraulic lines, ${all.filter((q) => q.type === 'belt' || q.type === 'bturn').length} belt sections`;
+    const nets = `${pgrid.nets.shaft.length} shaft lines, ${pgrid.nets.hyd.length} hydraulic lines, ${all.filter((q) => PW.CONV.has(q.type)).length} belt sections`;
     if (!p) return { key: 'parts', title: 'Power and belts', sub: 'Your builds · Engineering', status: this.status(), reason: this.reason(),
       tabs: { overview: [['Parts', all.length], ['Networks', nets], ['Earned', '$' + pgrid.earned.toFixed(0)], ['How to build', 'Pick a part in the chips below the view']], performance: pgrid.nets.shaft.map((n, i) => [`Shaft line ${i + 1}`, `${(n.supply || 0).toFixed(1)} kW for ${(n.want || 0).toFixed(1)} kW, ${Math.round((n.eff || 1) * 100)}% through the gears`]).concat(pgrid.nets.hyd.map((n, i) => [`Hydraulic line ${i + 1}`, n.leak ? 'leaking' : `${Math.round(n.bar || 0)} bar, ${(n.flow || 0).toFixed(1)} of ${n.want || 0} L/min`])),
         resources: Object.values(PW.MATS).map((m) => [m.name, m.buy ? `buy $${m.buy.toFixed(2)}` : `sells $${m.sell.toFixed(2)}`]), upgrades: { rows: [['Parts', 'Remove for half the price, place again']], gains: [] }, operation: { rows: [], log: pgrid.log.slice(0, 6) } },
@@ -1035,6 +1037,7 @@ const partsSim = {
     if (P.src || P.hsrc) acts.push({ id: 'pt-power', label: p.on ? 'Stop' : 'Start' });
     if (P.src && P.src.fuel) acts.push({ id: 'pt-fuel', label: 'Refuel' });
     if (P.bin) acts.push({ id: 'pt-buy', label: `Buy 40 ${PW.MATS[p.mat].name.toLowerCase()} $${Math.ceil(40 * PW.MATS[p.mat].buy)}`, primary: p.supply < 1 }, { id: 'pt-mat', label: 'Change material' });
+    if (P.toggle === 'filter') acts.push({ id: 'pt-fmat', label: `Sorting out: ${PW.MATS[p.fmat].name.toLowerCase()} (change)` });
     if (p.type === 'pallet') acts.push({ id: 'pt-sell', label: `Sell now (${p.palletN})`, disabled: !p.palletN });
     acts.push({ id: 'pt-rotate', label: 'Rotate' }, { id: 'pt-remove', label: `Remove ($${Math.round(P.price / 2)} back)` });
     return { key: 'parts', title: P.name, sub: 'Your builds · Engineering', status: this.status(), reason: this.partReason(p),
@@ -1047,7 +1050,8 @@ const partsSim = {
     if (id === 'pt-power') { p.on = !p.on; return { msg: `${P.name} ${p.on ? 'started' : 'stopped'}` }; }
     if (id === 'pt-fuel') { const c = Math.ceil((40 - p.fuel) * 1.4); if (c > w) return { msg: `Fuel costs $${c}` }; p.fuel = 40; return { cost: c, msg: `Refuelled for $${c}` }; }
     if (id === 'pt-buy') { const c = Math.ceil(40 * PW.MATS[p.mat].buy); if (c > w) return { msg: `It costs $${c}` }; p.supply += 40; return { cost: c, msg: `40 ${PW.MATS[p.mat].name.toLowerCase()} delivered for $${c}` }; }
-    if (id === 'pt-mat') { const L = ['grain', 'straw', 'log'], k = (L.indexOf(p.mat) + 1) % 3; p.mat = L[k]; p.supply = 0; return { msg: `The bin now takes ${PW.MATS[p.mat].name.toLowerCase()} (the old contents were returned)` }; }
+    if (id === 'pt-fmat') { const L = Object.keys(PW.MATS); p.fmat = L[(L.indexOf(p.fmat) + 1) % L.length]; return { msg: `The filter now sends ${PW.MATS[p.fmat].name.toLowerCase()} to the right` }; }
+    if (id === 'pt-mat') { const L = PW.BIN_MATS, k = (L.indexOf(p.mat) + 1) % L.length; p.mat = L[k]; p.supply = 0; return { msg: `The bin now takes ${PW.MATS[p.mat].name.toLowerCase()} (the old contents were returned)` }; }
     if (id === 'pt-sell') { const v = p.palletV; pgrid.earned += v; p.sold += p.palletN; p.palletN = 0; p.palletV = 0; return { cost: -v, msg: `Sold for $${v.toFixed(0)}` }; }
     if (id === 'pt-rotate') { dropPartModel(p); p.r = (p.r + 1) % 4; addPartModel(p); pgrid.solve(); return { msg: `${P.name} rotated` }; }
     if (id === 'pt-remove') { const v = Math.round(P.price / 2); dropPartModel(p); pgrid.remove(p); this.sel = null; select('parts', false); return { cost: -v, msg: `${P.name} removed, $${v} back` }; }
@@ -1460,16 +1464,25 @@ function animateParts(dt) {
     if (A.ram) A.ram.position.z = A.ram0 + (p.busy ? (1 - Math.max(0, p.t) / PW.PARTS[p.type].t) * 0.35 : 0);
     if (A.tex) A.tex.offset.x -= pgrid.beltSpeed * dt * vis / 0.46;
     if (A.items) { const k = Math.round(Math.min(1, p.palletN / 20) * A.items.length); A.items.forEach((it, i) => { it.visible = i < k; }); }
+    const F = m.fw; if (!F) return;
+    const P = PW.PARTS[p.type], run = envP.powered && (!P.use || p.on), mv = run ? dt * vis : 0;
+    if (F.cleats) F.cleats.position.x = ((F.cleats.position.x + pgrid.beltSpeed * mv) % 0.24 + 0.24) % 0.24;
+    const work = p.busy && run ? (p.speed || 1) * mv : 0;
+    if (F.wheel) F.wheel.rotation.z -= work * 14;
+    if (F.blade) F.blade.rotation.z -= work * 22;
+    if (F.press) F.press.position.y = 0.55 + 0.62 - (p.busy ? Math.max(0, Math.sin((1 - Math.max(0, p.t) / P.t) * Math.PI)) * 0.2 : 0);
+    const em = (n, k) => { if (n) n.traverse((o) => { if (o.isMesh) o.material.emissiveIntensity = o.userData.e0 * k; }); };
+    if (F.beam) em(F.beam, p.blink > 0 ? 0.15 : run ? 1 : 0.05);
+    if (F.glow) { const g = p.busy && run ? 0.85 + Math.sin(performance.now() / 140) * 0.15 : p.buf && p.buf.length ? 0.35 : 0.08; em(F.glow, g); em(F.glow2, g); }
+    if (F.lamp_g) { const st = !run ? 'r' : p.busy ? 'g' : 'a'; em(F.lamp_g, st === 'g' ? 3 : 0.08); em(F.lamp_a, st === 'a' ? 3 : 0.08); em(F.lamp_r, st === 'r' ? 3 : 0.08); }
   });
-  // units on belts (and the next unit sitting in a machine's outlet)
+  // units on belts and inside the machines, from the part's own item positions
   const seen = new Set();
   pgrid.parts.forEach((p) => {
-    const list = p.type === 'belt' || p.type === 'bturn' ? p.belt : PW.PARTS[p.type].use ? p.out.slice(0, 1) : [];
-    list.forEach((it) => {
-      let me = partItemMeshes.get(it.id); if (!me || me.userData.mat !== it.mat) { if (me) scene.remove(me); me = PW.itemMesh(it.mat); me.userData.mat = it.mat; me.userData.part = p.id; scene.add(me); partItemMeshes.set(it.id, me); }
-      me.userData.part = p.id;
-      if (p.type === 'belt') LOCAL.set(-0.6 + it.p * PW.CELL, 0.8, 0); else if (p.type === 'bturn') LOCAL.copy(it.p < 0.5 ? new V(-0.6 + it.p * 1.2, 0.8, 0) : new V(0, 0.8, (it.p - 0.5) * 1.2)); else LOCAL.set(0.1, 0.8, 0.45);
-      const [x, z] = partXZ(p.i, p.j); tmpQ.setFromAxisAngle(new V(0, 1, 0), -p.r * Math.PI / 2); LOCAL.applyQuaternion(tmpQ); me.position.set(x + LOCAL.x, LOCAL.y, z + LOCAL.z); seen.add(it.id);
+    const off = partOff(p.type), [x, z] = partXZ(p.i, p.j); tmpQ.setFromAxisAngle(new V(0, 1, 0), -p.r * Math.PI / 2);
+    pgrid.visItems(p).forEach(({ it, x: lx, y: ly, z: lz }) => {
+      let me = partItemMeshes.get(it.id); if (!me || me.userData.mat !== it.mat) { if (me) scene.remove(me); me = PW.itemMesh(it.mat); me.userData.mat = it.mat; scene.add(me); partItemMeshes.set(it.id, me); }
+      me.userData.part = p.id; LOCAL.set(lx + off, ly + 0.012, lz).applyQuaternion(tmpQ); me.position.set(x + LOCAL.x, LOCAL.y, z + LOCAL.z); me.quaternion.copy(tmpQ); seen.add(it.id);
     });
   });
   partItemMeshes.forEach((me, id) => { if (!seen.has(id)) { scene.remove(me); partItemMeshes.delete(id); } });
@@ -1615,22 +1628,39 @@ function startBuild(kind) {
   toast(`${BD.BUILDINGS[kind].name}: ${touch ? 'tap the ground to move it, then Place' : 'move the mouse, R to rotate, click to place'} (${money(BD.BUILDINGS[kind].cost)})`);
 }
 // ---------- placeable parts: shafts, hydraulics, belts and machines on a 1.2 m grid ----------
-const PART_STATIC = { engine: [0.45, 0.4, 0.35], wind: [0.5, 2.0, 0.5], pack: [0.45, 0.45, 0.35], bin: [0.5, 1.0, 0.5], mill: [0.55, 0.65, 0.6], baler: [0.55, 0.65, 0.6], splitter: [0.55, 0.6, 0.6], accum: [0.25, 0.8, 0.25], motor: [0.45, 0.4, 0.3] };
+const PART_STATIC = { sawmill: [1.2, 0.9, 0.6], stonecutter: [1.2, 0.9, 0.6], smelter: [1.2, 1.1, 0.65], packer: [1.2, 0.9, 0.65], engine: [0.45, 0.4, 0.35], wind: [0.5, 2.0, 0.5], pack: [0.45, 0.45, 0.35], bin: [0.5, 1.0, 0.5], mill: [0.55, 0.65, 0.6], baler: [0.55, 0.65, 0.6], splitter: [0.55, 0.6, 0.6], accum: [0.25, 0.8, 0.25], motor: [0.45, 0.4, 0.3] };
 const partModels = new Map(), partBodies = new Map();
 function partXZ(i, j) { return [i * PW.CELL, j * PW.CELL]; }
-function canPlacePart(i, j) {
-  if (pgrid.at(i, j)) return 'Something is already in this cell';
-  const [x, z] = partXZ(i, j), h = PW.CELL / 2 - 0.02, x0 = x - h, x1 = x + h, z0 = z - h, z1 = z + h;
-  if (x0 < -33 || x1 > 33 || z0 < -27 || z1 > 24.7) return 'Outside the flat yard';
-  for (const [a, b, c, e] of NO_BUILD) if (x0 < c && x1 > a && z0 < e && z1 > b) return 'In the way of the field, a line or the tractor slots';
-  const own = new Set(partBodies.values());
-  for (const bd of STATICS) { if (bd === groundBody || bd.userData === 'wall' || own.has(bd)) continue; const lo = bd.aabb.lowerBound, hi = bd.aabb.upperBound; if (x0 < hi.x && x1 > lo.x && z0 < hi.z && z1 > lo.z) return 'Something is already there'; }
+// Blender-made models for the factory family (conveyors and inline machines); the code-built model is the fallback
+const FW_MODEL = { belt: 1, bturn: 1, bleft: 1, split: 1, merge: 1, filter: 1, sensor: 1, sawmill: 1, stonecutter: 1, smelter: 1, packer: 1 };
+const partOff = (type) => ((PW.PARTS[type].len || 1) - 1) * PW.CELL / 2;   // long parts: model centre from the first cell, along local east
+function fwSwap(root, type, ghost) {
+  if (!FW_MODEL[type]) return Promise.resolve(null);
+  return MD.swap(root, 'models/fw_' + type + '.glb').then((r) => {
+    if (!r) return null; r.scene.position.x = partOff(type);
+    if (ghost) { r.scene.traverse((o) => { if (o.isMesh) { o.material = BUILD.ok ? ghostOK : ghostBad; o.castShadow = false; } }); return r; }
+    // lamps, beams and glows change per machine: give each its own material
+    ['lamp_g', 'lamp_a', 'lamp_r', 'beam', 'glow', 'glow2', 'screen'].forEach((k) => { const n = r.parts[k]; if (n) n.traverse((o) => { if (o.isMesh) { o.material = o.material.clone(); o.userData.e0 = o.material.emissiveIntensity || 1; } }); });
+    return r;
+  });
+}
+function canPlacePart(i, j, type, r, loading) {
+  for (const [a, b] of PW.PartGrid.cellsOf(type && PW.PARTS[type] ? type : 'shaft', i, j, r || 0)) {
+    if (pgrid.at(a, b)) return 'Something is already in this cell';
+    if (loading) continue;
+    const [x, z] = partXZ(a, b), h = PW.CELL / 2 - 0.02, x0 = x - h, x1 = x + h, z0 = z - h, z1 = z + h;
+    if (x0 < -33 || x1 > 33 || z0 < -27 || z1 > 24.7) return 'Outside the flat yard';
+    for (const [a0, b0, c, e] of NO_BUILD) if (x0 < c && x1 > a0 && z0 < e && z1 > b0) return 'In the way of the field, a line or the tractor slots';
+    const own = new Set(partBodies.values());
+    for (const bd of STATICS) { if (bd === groundBody || bd.userData === 'wall' || own.has(bd)) continue; const lo = bd.aabb.lowerBound, hi = bd.aabb.upperBound; if (x0 < hi.x && x1 > lo.x && z0 < hi.z && z1 > lo.z) return 'Something is already there'; }
+  }
   return '';
 }
 function addPartModel(p) {
   const m = PW.partModel(p.type), [x, z] = partXZ(p.i, p.j); m.root.position.set(x, 0, z); m.root.rotation.y = -p.r * Math.PI / 2; stylize(m.root); scene.add(m.root);
   m.root.userData.part = p; KEY_OF.set(m.root, 'parts'); outlines.register(m.root); partModels.set(p.id, m);
-  const S = PART_STATIC[p.type]; if (S) { const q = p.r % 2; partBodies.set(p.id, addStatic(box3(q ? S[2] : S[0], S[1], q ? S[0] : S[2]), x, S[1], z)); }
+  fwSwap(m.root, p.type).then((r) => { if (r && partModels.get(p.id) === m) m.fw = r.parts; });
+  const S = PART_STATIC[p.type]; if (S) { const q = p.r % 2, o = partOff(p.type), a = -p.r * Math.PI / 2; partBodies.set(p.id, addStatic(box3(q ? S[2] : S[0], S[1], q ? S[0] : S[2]), x + Math.cos(a) * o, S[1], z - Math.sin(a) * o)); }
 }
 function dropPartModel(p) {
   const m = partModels.get(p.id); if (m) { scene.remove(m.root); KEY_OF.delete(m.root); partModels.delete(p.id); }
@@ -1641,7 +1671,7 @@ function placePart(type, i, j, r, st) { const p = pgrid.add(type, i, j, r, st); 
 function startPart(type) {
   cancelBuild(); BUILD.kind = 'part'; BUILD.part = type; BUILD.r = BUILD.r || 0;
   const g = type === 'remove' ? new THREE.Mesh(new THREE.BoxGeometry(PW.CELL, 0.1, PW.CELL)) : PW.partModel(type).root;
-  g.traverse((o) => { if (o.isMesh) { o.material = ghostOK; o.castShadow = false; } }); BUILD.ghost = g; scene.add(g);
+  g.traverse((o) => { if (o.isMesh) { o.material = ghostOK; o.castShadow = false; } }); BUILD.ghost = g; scene.add(g); if (type !== 'remove') fwSwap(g, type, true);
   const t = controls.target; moveGhost(t.x, t.z);
   $('build-place').hidden = false; $('build-rotate').hidden = type === 'remove'; $('build-cancel').hidden = false;
   toast(type === 'remove' ? 'Click parts to remove them (half the price back)' : `${PW.PARTS[type].name} $${PW.PARTS[type].price}: ${touch ? 'tap the ground, then Place' : 'move the mouse, R to rotate, click to place; it stays in build mode'}. ${PW.PARTS[type].note}`);
@@ -1650,8 +1680,8 @@ function moveGhost(x, z) {
   if (BUILD.kind === 'part') {
     const i = Math.round(x / PW.CELL), j = Math.round(z / PW.CELL); BUILD.i = i; BUILD.j = j; BUILD.x = i * PW.CELL; BUILD.z = j * PW.CELL;
     BUILD.ghost.position.set(BUILD.x, 0.02, BUILD.z); BUILD.ghost.rotation.y = -BUILD.r * Math.PI / 2;
-    BUILD.why = BUILD.part === 'remove' ? (pgrid.at(i, j) ? '' : 'No part here') : canPlacePart(i, j); BUILD.ok = !BUILD.why;
-    BUILD.ghost.traverse((o) => { if (o.isMesh) o.material = BUILD.ok ? (BUILD.part === 'remove' ? ghostBad : ghostOK) : ghostBad; });
+    BUILD.why = BUILD.part === 'remove' ? (pgrid.at(i, j) ? '' : 'No part here') : canPlacePart(i, j, BUILD.part, BUILD.r); BUILD.ok = !BUILD.why;
+    BUILD.ghost.traverse((o) => { if (o.isMesh && o.visible) o.material = BUILD.ok ? (BUILD.part === 'remove' ? ghostBad : ghostOK) : ghostBad; });
     return;
   }
   BUILD.x = Math.round(x * 2) / 2; BUILD.z = Math.round(z * 2) / 2;   // snap to a 0.5 m grid
@@ -1705,7 +1735,7 @@ function snapshot() {
     tech: { dig: { massKg: digester.massKg, gasM3: digester.gasM3, tempC: digester.tempC, digestateL: digester.digestateL, mode: digester.mode, queue: digester.queue.slice(0, 40) },
       stw: { tankL: steward.tankL, auto: steward.auto, nTarget: steward.nTarget, map: steward.map.map((m) => [m.n, m.comp, Math.round(steward.time - m.t)]), batt: steward.rover.batt, roverL: steward.rover.tankL },
       rules: logic.rules.map((r) => ({ sensor: r.sensor, cmp: r.cmp, value: r.value, action: r.action, enabled: r.enabled })), logicOn: logic.on,
-      parts: pgrid.parts.map((p) => ({ t: p.type, i: p.i, j: p.j, r: p.r, on: p.on, engaged: p.engaged, open: p.open, mat: p.mat, supply: Math.floor(p.supply), fuel: +p.fuel.toFixed(1), stored: +p.stored.toFixed(2), palletN: p.palletN, palletV: +p.palletV.toFixed(2) })), partsEarned: pgrid.earned,
+      parts: pgrid.parts.map((p) => ({ t: p.type, i: p.i, j: p.j, r: p.r, on: p.on, engaged: p.engaged, open: p.open, mat: p.mat, supply: Math.floor(p.supply), fuel: +p.fuel.toFixed(1), stored: +p.stored.toFixed(2), palletN: p.palletN, palletV: +p.palletV.toFixed(2), fmat: p.fmat || undefined, count: p.count || undefined })), partsEarned: pgrid.earned,
       core: { bays: core.bays, routes: core.routes, earned: core.earned, sold: core.sold, waste: core.waste, on: core.on },
       ws: { built: custom.built, draft: custom.draft, saved: custom.saved, supply: custom.supply, out: custom.out, fuel: custom.fuel, made: custom.made, earned: custom.earned, spent: custom.spent, on: custom.on } },
     buildings: placed.map((b) => ({ kind: b.kind, x: b.x, z: b.z, rot: b.rot })) };
@@ -1729,7 +1759,7 @@ function applySave(s) {
     (w.map || []).forEach((m, i) => { if (steward.map[i]) Object.assign(steward.map[i], { n: m[0], comp: m[1], t: m[0] === null ? -1e9 : -m[2] }); });
     if (Array.isArray(s.tech.rules)) { logic.rules.length = 0; s.tech.rules.forEach((r) => { if (SENSORS[r.sensor] && ACTIONS[r.action]) logic.add(r); }); }
     logic.on = s.tech.logicOn !== false;
-    if (Array.isArray(s.tech.parts)) { [...pgrid.parts].forEach((p) => { dropPartModel(p); pgrid.remove(p); }); s.tech.parts.forEach((q) => { if (PW.PARTS[q.t] && !pgrid.at(q.i, q.j)) placePart(q.t, q.i | 0, q.j | 0, (q.r | 0) % 4, { on: q.on !== false, engaged: q.engaged !== false, open: q.open !== false, mat: q.mat && PW.MATS[q.mat] ? q.mat : PW.PARTS[q.t].bin ? 'grain' : null, supply: +q.supply || 0, fuel: +q.fuel || 0, stored: +q.stored || 0, palletN: q.palletN | 0, palletV: +q.palletV || 0 }); }); pgrid.earned = +s.tech.partsEarned || 0; }
+    if (Array.isArray(s.tech.parts)) { [...pgrid.parts].forEach((p) => { dropPartModel(p); pgrid.remove(p); }); s.tech.parts.forEach((q) => { if (PW.PARTS[q.t] && !canPlacePart(q.i | 0, q.j | 0, q.t, (q.r | 0) % 4, true)) placePart(q.t, q.i | 0, q.j | 0, (q.r | 0) % 4, { on: q.on !== false, engaged: q.engaged !== false, open: q.open !== false, mat: q.mat && PW.MATS[q.mat] ? q.mat : PW.PARTS[q.t].bin ? 'grain' : null, supply: +q.supply || 0, fuel: +q.fuel || 0, stored: +q.stored || 0, palletN: q.palletN | 0, palletV: +q.palletV || 0, fmat: q.fmat && PW.MATS[q.fmat] ? q.fmat : PW.PARTS[q.t].toggle === 'filter' ? 'log' : null, count: q.count | 0 }); }); pgrid.earned = +s.tech.partsEarned || 0; }
     const cs = s.tech.core; if (cs) { if (Array.isArray(cs.bays)) cs.bays.slice(0, CR.BAYS).forEach((b, k) => { core.bays[k] = CR.MODULES[b] ? b : 'empty'; }); Object.keys(core.routes).forEach((c) => { if (cs.routes && c in cs.routes) core.routes[c] = !!cs.routes[c]; }); core.earned = +cs.earned || 0; core.sold = cs.sold || {}; core.waste = cs.waste | 0; core.on = cs.on !== false; rebuildCoreMods(); }
     const ws = s.tech.ws; if (ws) { custom.built = ws.built ? DS.cleanDesign(ws.built) : null; custom.draft = DS.cleanDesign(ws.draft); custom.saved = (ws.saved || []).slice(0, 8).map(DS.cleanDesign); Object.assign(custom, { supply: +ws.supply || 0, out: ws.out | 0, fuel: +ws.fuel || 0, made: ws.made | 0, earned: +ws.earned || 0, spent: +ws.spent || 0, on: ws.on !== false }); }
   }
@@ -1741,6 +1771,13 @@ function applySave(s) {
 // step-up gearbox driving a hydraulic pump, an accumulator and a baler fed from a straw bin. Remove or rebuild them freely.
 [['motor', 16, 18, 0], ['shaft', 17, 18, 0], ['mill', 18, 18, 0], ['bin', 18, 17, 1, { mat: 'grain', supply: 40 }], ['belt', 18, 19, 1], ['pallet', 18, 20, 0],
  ['wind', 20, 18, 0], ['stepup', 21, 18, 0], ['pump', 22, 18, 0], ['accum', 23, 18, 0], ['baler', 24, 18, 0], ['bin', 24, 17, 1, { mat: 'straw', supply: 40 }], ['belt', 24, 19, 1], ['pallet', 24, 20, 0]].forEach(([t, i, j, r, st]) => placePart(t, i, j, r, st));
+// starter factory in the west yard: (C) logs through the band sawmill into the crate packer; (D) ore through the smelter
+// into a splitter; (E) stone through the cutter past a counting sensor and a left turn; (F) grain and straw merged, then
+// sorted again by a filter. Every piece can be moved, turned or removed.
+[['bin', -23, 1, 0, { mat: 'log', supply: 40 }], ['belt', -22, 1, 0], ['sawmill', -21, 1, 0], ['belt', -19, 1, 0], ['packer', -18, 1, 0], ['pallet', -16, 1, 0],
+ ['bin', -23, 4, 0, { mat: 'ore', supply: 40 }], ['belt', -22, 4, 0], ['smelter', -21, 4, 0], ['split', -19, 4, 0], ['pallet', -19, 3, 0], ['pallet', -19, 5, 0],
+ ['bin', -23, 7, 0, { mat: 'stone', supply: 40 }], ['belt', -22, 7, 0], ['stonecutter', -21, 7, 0], ['sensor', -19, 7, 0], ['bleft', -18, 7, 0], ['pallet', -18, 6, 0],
+ ['bin', -23, 10, 0, { mat: 'grain', supply: 40 }], ['belt', -22, 10, 0], ['merge', -21, 10, 0], ['bin', -21, 11, 3, { mat: 'straw', supply: 40 }], ['filter', -20, 10, 0, { fmat: 'straw' }], ['pallet', -20, 11, 0], ['belt', -19, 10, 0], ['bturn', -18, 10, 0], ['pallet', -18, 11, 0]].forEach(([t, i, j, r, st]) => placePart(t, i, j, r, st));
 const saved = AUDIT || qs.has('fresh') ? null : readSave();
 if (saved) { try { applySave(saved); wsRebuildBuilt(); wsRefreshDraft(); setTimeout(() => toast('Saved farm loaded'), 300); } catch (e) { console.warn('Save could not be applied', e); } }
 else { placeBuilding('barn', -16, 12, Math.PI / 2); wsRefreshDraft(); }
