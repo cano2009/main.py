@@ -9,7 +9,9 @@ const loader = new GLTFLoader(), cache = new Map();
 // status lights added by glow.js are emissive and drawn on top: they stay (the caller may move them)
 const isGlow = (m) => m.material && m.material.emissive && m.material.emissiveIntensity > 0 && !m.material.map && (m.material.emissive.r + m.material.emissive.g + m.material.emissive.b) > 0.05;
 export function loadModel(url) {
-  if (!cache.has(url)) cache.set(url, new Promise((ok, bad) => loader.load(url, (g) => ok(g.scene), undefined, bad)));
+  // the web demo can only serve scripts, so each .glb also ships as a .glb.js module holding it as base64
+  const viaJs = (u) => import('./' + u + '.js').then((m) => { const b = atob(m.default), a = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return new Promise((ok, bad) => loader.parse(a.buffer, '', (g) => ok(g.scene), bad)); });
+  if (!cache.has(url)) cache.set(url, viaJs(url).catch(() => new Promise((ok, bad) => loader.load(url, (g) => ok(g.scene), undefined, bad))));
   return cache.get(url).then((s) => s.clone(true));
 }
 /** swap(host, url, o): hide host's own meshes (but not its port sockets or glow lights), add the model inside it.
