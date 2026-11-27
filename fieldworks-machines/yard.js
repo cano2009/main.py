@@ -215,7 +215,7 @@ export function solarArray() {
   bake(table, []); bake(root, [table, drive]);
   const dust = new THREE.Color(), cleanC = new THREE.Color(1, 1, 1), dirtC = lin('#b9a27a');
   return {
-    root, table, invScreen, inverter: inv, terminal: new V(3.1, 0.2, 0.3),
+    root, table, drive, invScreen, inverter: inv, terminal: new V(3.1, 0.2, 0.3),
     animate(dt, sim) {
       table.rotation.x = sim.tilt * Math.PI / 180;
       drive.visible = !!sim.level.tracker;

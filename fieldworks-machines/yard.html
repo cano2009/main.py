@@ -1344,6 +1344,12 @@ const under = (m, groups) => { for (let p = m; p; p = p.parent) if (groups.inclu
 const sockOf = (m) => { for (let p = m; p; p = p.parent) if (Math.abs(p.position.x - 4.6) < 0.01 && Math.abs(p.position.z - 3.4) < 0.01) return true; return false; };
 MD.swap(tw.root, 'models/wind_turbine.glb', { attach: { yaw: tw.yaw, rotor: tw.rotor }, keep: sockOf });
 MD.swap(wsh.root, 'models/hydrowash.glb').then((r) => { if (r) { washParts = r.parts; envMats = null; } });
+// power yard (mid-poly Blender models): the game keeps its screens, labels, LEDs, sockets, the battery fans, the breaker
+// handles and the tracker drive; the solar table node goes into the game's table group so it still tilts
+MD.swap(xf.root, 'models/py_transformer.glb');
+MD.swap(bess.root, 'models/py_bess.glb', { keep: (m) => under(m, bess.fans) });
+MD.swap(dp.root, 'models/py_panel.glb', { keep: (m) => under(m, Object.values(dp.breakers).map((b) => b.handle)) });
+MD.swap(sa.root, 'models/py_solar.glb', { attach: { table: sa.table }, keep: (m) => under(m, [sa.drive]) });
 function animateLine(dt) {
   const run = lineSim.running(), v = run ? lineSim.level.beltSpeed * lineSim.efficiency() * speed : 0;
   belt.move(v * dt);
