@@ -271,14 +271,15 @@ let fieldMeshes = [];
 const fM4 = new THREE.Matrix4(), fQ = new THREE.Quaternion(), fS = new V(), fP = new V(), fC = new THREE.Color(), DRY = new THREE.Color(1.0, 0.84, 0.5), UP = new V(0, 1, 0);
 function buildFieldMeshes() {
   fieldMeshes.forEach((m) => scene.remove(m));
-  fieldMeshes = LP.stages(fieldSim.crop).map((geo) => { const m = new THREE.InstancedMesh(geo, LP.material(), fieldSim.plants.length); m.castShadow = true; m.receiveShadow = true; m.count = 0; scene.add(m); return m; });
+  fieldMeshes = LP.stages(fieldSim.crop).map((geo) => { const m = new THREE.InstancedMesh(geo, LP.material(), fieldSim.plants.length); m.castShadow = true; m.receiveShadow = true; m.count = 0; m.frustumCulled = false; scene.add(m); return m; });   // instances span the whole field, so the origin-based culling box would hide them
   paintField();
 }
 function paintField() {
   const cnt = [0, 0, 0, 0];
   fieldSim.used.forEach((p) => {
     const st = fieldSim.stageOf(p), m = fieldMeshes[st], i = cnt[st]++;
-    fQ.setFromAxisAngle(UP, p.rot); fS.setScalar(1.55 * p.size * (st === 3 ? 1 : 0.8 + Math.min(1, p.g) * 0.25));   // drawn a little larger than life so rows read from the yard fM4.compose(fP.set(p.x, 0.15, p.z), fQ, fS); m.setMatrixAt(i, fM4);
+    fQ.setFromAxisAngle(UP, p.rot); fS.setScalar(1.55 * p.size * (st === 3 ? 1 : 0.8 + Math.min(1, p.g) * 0.25));   // drawn a little larger than life so rows read from the yard
+    fM4.compose(fP.set(p.x, 0.15, p.z), fQ, fS); m.setMatrixAt(i, fM4);
     fC.setRGB(1, 1, 1).lerp(DRY, 1 - Math.min(1, p.wet * 2.2)).multiplyScalar(0.92 + p.shade * 0.16); m.setColorAt(i, fC);
   });
   fieldMeshes.forEach((m, k) => { m.count = cnt[k]; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; });
