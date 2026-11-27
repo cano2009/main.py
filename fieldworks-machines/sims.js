@@ -720,14 +720,15 @@ export class TractorSim extends Unit {
 export const CHAIN_DEF = {
   id: 'chain', name: 'Food Production', short: 'Food line', type: 'Mill, oven and bagger', brand: 'Fieldworks Processing', model: 'FW-FP2', category: 'Processing',
   levels: [{ level: 1, millS: 4, bakeS: 10, cost: 0, parts: [] }, { level: 2, millS: 3, bakeS: 7, cost: 8000, parts: ['Steel rollers', 'Second heating zone'] }, { level: 3, millS: 2, bakeS: 5, cost: 16000, parts: ['Twin mill', 'Convection oven'] }],
-  belt: 0.4, gap: 0.5, lengths: { cross: 4.37, milled: 2.6, baked: 2.2 }, crossFlat: 1.9, millIn: 2, packN: 4, palletCrates: 12,
+  belt: 0.4, gap: 0.5, lengths: { cross: 4.37, milled: 2.6, baked: 2.2 }, crossFlat: 1.9, routeS: 1.5, millIn: 2, packN: 4, palletCrates: 12,
   value: { flour: 6, cornmeal: 5, bread: 11 }, kw: { mill: 4, oven: 6, bagger: 1, belts: 0.6 }, wearPerHour: 3, repairCostPerPct: 12
 };
 export class ChainSim extends Unit {
   constructor() { super(CHAIN_DEF); this.seg = { cross: [], milled: [], baked: [] }; this.millBuf = []; this.millT = 0; this.bagBuf = []; this.bagT = 0; this.crates = 0; this.crateValue = []; this.sold = 0; this.earned = 0; this.made = { flour: 0, cornmeal: 0, bread: 0 }; this.id = 1; this.ovenOn = false; }
   running() { return this.on && this.powered && !this.fault && !this.inhibit; }
-  accept(crop) { if (this.seg.cross.length && this.seg.cross[this.seg.cross.length - 1].s < this.def.gap) return false; this.seg.cross.push({ id: this.id++, kind: crop, s: 0 }); return true; }
-  busy() { return this.seg.cross.length + this.seg.milled.length + this.seg.baked.length + this.millBuf.length + this.bagBuf.length > 0 || this.millT > 0; }
+  // to: 'mill' (up the elevator) or 'core' (the router turns it off at ROUTE_S onto the production core's conveyor)
+  accept(crop, to, grade) { if (this.seg.cross.length && this.seg.cross[this.seg.cross.length - 1].s < this.def.gap) return false; this.seg.cross.push({ id: this.id++, kind: crop, s: 0, to: to || 'mill', grade }); return true; }
+  busy() { return this.seg.cross.filter((i) => i.to !== 'core').length + this.seg.milled.length + this.seg.baked.length + this.millBuf.length + this.bagBuf.length > 0 || this.millT > 0; }
   status() { if (!this.on) return 'off'; if (!this.powered || this.fault) return 'stopped'; if (this.inhibit) return 'waiting'; return this.busy() ? 'running' : 'waiting'; }
   reason() { if (!this.on) return 'Switched off'; if (!this.powered) return 'No power - check the yard network'; if (this.fault) return this.fault.text; if (this.inhibit) return 'Held by ' + this.inhibit; return this.busy() ? `Milling and baking (${this.made.bread} loaves so far)` : 'Waiting for wheat or corn from the sorter'; }
   powerKw() { if (!this.on || this.fault) return 0.03; const K = this.def.kw; return K.belts + (this.millT > 0 ? K.mill : 0.1) + (this.seg.milled.some((i) => i.kind === 'flour' && i.s > 0.6) ? K.oven : 0.4) + (this.bagT > 0 ? K.bagger : 0.05); }
@@ -741,6 +742,10 @@ export class ChainSim extends Unit {
     if (!this.running()) return 0;
     const v = D.belt * this.efficiency();
     this.move(this.seg.cross, D.lengths.cross, (it) => { if (this.millBuf.length >= 6) return false; this.millBuf.push(it); return true; }, v, dt);
+    // the router: units bound for the core leave at ROUTE_S when the core's conveyor has room, otherwise they wait there
+    for (const it of this.seg.cross) if (it.to === 'core' && it.s >= D.routeS) { if (this.core && this.core.canTake()) { this.core.accept(it.kind, it.grade); it.gone = true; this.routed = (this.routed || 0) + 1; this.flapT = 1.2; } else it.s = D.routeS; }
+    this.seg.cross = this.seg.cross.filter((it) => !it.gone);
+    if (this.flapT > 0) this.flapT -= dt;
     if (this.millT > 0) { this.millT -= dt; if (this.millT <= 0) { const a = this.millBuf.splice(0, D.millIn), kind = a[0].kind === 'corn' ? 'cornmeal' : 'flour'; this.seg.milled.push({ id: this.id++, kind, s: 0 }); this.made[kind]++; } }
     else if (this.millBuf.length >= D.millIn && (!this.seg.milled.length || this.seg.milled[this.seg.milled.length - 1].s > D.gap)) this.millT = Lv.millS;
     // the oven tunnel is the second half of the milled belt: flour that passes through it comes out as bread
@@ -825,7 +830,7 @@ export class LineSim extends Unit {
         this.graded[it.grade] = (this.graded[it.grade] || 0) + 1;
       }
       // the diverter sits at the sorter exit: grain is pushed sideways onto the grain conveyor (if it has room)
-      if (!it.divTried && it.s >= Z.divert && this.divert && CROPS[it.crop] && CROPS[it.crop].grain) { it.divTried = true; if (this.divert(it.crop)) { it.diverted = true; this.toChain = (this.toChain || 0) + 1; this.pushT = 0.6; } }
+      if (!it.divTried && it.s >= Z.divert && this.divert && CROPS[it.crop]) { it.divTried = true; if (this.divert(it.crop, it)) { it.diverted = true; this.toChain = (this.toChain || 0) + 1; this.pushT = 0.6; } }
     }
     this.items = this.items.filter((it) => !it.diverted && !it.rejected);
     while (this.items.length && this.items[0].s >= Z.pack) this.packBuf.push(this.items.shift());

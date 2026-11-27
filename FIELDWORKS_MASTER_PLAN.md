@@ -48,7 +48,9 @@ This stage builds one loop that runs through the whole farm, instead of many dis
 
 Layout: the tractor's implements park with the long trailer farthest from the line, the digester stands clear of the sorter, and buried cables and pipes show only where they rise out of the ground. Towed implements now straighten by distance reversed and park square at any game speed.
 
-Still to build from the 100x prompt, in order of value: production recipes and multi-stage cores (2B, 2D, 8), mechanical and hydraulic power types (4, 9), fluid pressure and flow (11), logistics routes and forklifts (12), blueprints, milestones and environmental footprint (14), and crop research (6).
+| 2D, 8. Multi-stage production (step 2) | Production Core: five module bays on a spine conveyor, fed from the farm. A router after the optical sorter sends the crops you tick (sunflower and soybean by default, wheat and corn optionally) along a feed conveyor and a 90° transfer table onto the spine. There are 9 modules: air cleaner (purity +25 points, blows out husks as waste), drum dryer, screw press (oilseed → oil + seed cake), roller mill (grain → flour + bran), feed mixer (byproducts → animal feed), buffer tank, cooling unit, power cabinet and bottler/sacker (+40%). Each module works only on the materials it understands, so the order of the bays matters, and the line check flags a wrong order. Power and heat are shared across the line, purity and moisture carry through to the price, and modules can be installed and swapped in the game. | `core.js`, `sims.js`, `yard.html` |
+
+Still to build from the 100x prompt, in order of value: the resource synthesizer (2B), mechanical and hydraulic power types (4, 9), fluid pressure and flow (11), logistics routes and forklifts (12), blueprints, milestones and environmental footprint (14), and crop research (6).
 
 ## Stage 2: needs the real project (PC connected)
 1. Inspect the real game: engine, chunk terrain, save format, building system, vehicles, existing assets.
