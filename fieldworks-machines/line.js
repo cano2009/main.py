@@ -134,13 +134,19 @@ export function cutter() {
   cylZ(0.035, 1.12, 8, L.steel, 0, 0, 0, brush);
   for (let k = 0; k < 3; k++) { const b = box(0.2, 0.03, 0.9, L.red, 0, 0, 0, brush); b.rotation.z = k * Math.PI / 3; }
   // reject chute and bin on the front
-  const ch = box(0.4, 0.04, 0.6, L.steel, -0.12, 0.62, 0.95, root); ch.rotation.x = 0.45;
-  [-1, 1].forEach((s) => { const w = box(0.03, 0.12, 0.6, L.steel, -0.12 + s * 0.2, 0.67, 0.95, root); w.rotation.x = 0.45; });
-  box(0.55, 0.4, 0.45, L.greenD, -0.12, 0.2, 1.35, root); box(0.5, 0.02, 0.4, L.dark, -0.12, 0.405, 1.35, root);
+  const ch = box(0.4, 0.04, 0.6, L.steel, -0.12, 0.62, -0.95, root); ch.rotation.x = -0.45;
+  [-1, 1].forEach((s) => { const w = box(0.03, 0.12, 0.6, L.steel, -0.12 + s * 0.2, 0.67, -0.95, root); w.rotation.x = -0.45; });
+  box(0.55, 0.4, 0.45, L.greenD, -0.12, 0.2, -1.35, root); box(0.5, 0.02, 0.4, L.dark, -0.12, 0.405, -1.35, root);
+  // grain diverter at the exit: a pusher on the back rail sweeps wheat and corn across a slide plate onto the grain conveyor
+  box(0.95, 0.02, 0.16, L.steel, -0.67, BELT_Y - 0.01, 0.5, root);   // slide plate, fixed to the front pillar
+  box(0.3, 0.22, 0.14, L.yellowD, -0.75, BELT_Y + 0.1, -0.6, root); box(0.62, 0.08, 0.08, L.yellowD, -0.45, BELT_Y + 0.1, -0.6, root);
+  cylZ(0.04, 0.2, 8, L.steel, -0.75, BELT_Y + 0.1, -0.45, root);   // pusher actuator on an arm from the back pillar
+  const pusher = new THREE.Group(); pusher.position.set(-0.75, BELT_Y + 0.09, -0.42); root.add(pusher);
+  cylZ(0.025, 0.4, 8, L.steel, 0, 0, 0.2, pusher); box(0.34, 0.14, 0.03, L.red, 0, 0, 0.41, pusher);
   // control box on the back pillar
   box(0.3, 0.36, 0.14, L.cream, 0.26, 1.25, -0.6, root); box(0.2, 0.12, 0.01, mat('#123326'), 0.26, 1.3, -0.528, root);
-  bake(root, [brush, ...lights]);
-  return { root, heat: lights, gears: [{ g: brush, r: 0.09 }], ledAt: new V(0.33, 1.15, -0.52) };
+  bake(root, [brush, pusher, ...lights]);
+  return { root, heat: lights, gears: [{ g: brush, r: 0.09 }], pusher, ledAt: new V(0.33, 1.15, -0.52) };
 }
 
 // ---------------------------------------------------------------------------
@@ -247,4 +253,22 @@ export function chute(x0, y0, x1, y1) {
   [[-1], [1]].forEach(([s]) => box(0.05, y0 - 0.02, 0.05, L.steelD, x0 - 0.03, (y0 - 0.02) / 2, s * 0.3, root));
   bake(root, []);
   return { root, dirOut: d.clone().normalize() };
+}
+
+/** Inclined conveyor: rises `rise` metres over `run` metres along +x from the origin (belt top at BELT_Y), with
+ *  vertical support legs, side rails, a head drum and a short discharge lip. move(d) runs the belt. */
+export function incline(run, rise) {
+  const root = new THREE.Group(); root.name = 'Inclined conveyor'; root.userData.pick = 'chain';
+  const len = Math.hypot(run, rise), ang = Math.atan2(rise, run), W = 0.6;
+  const deck = new THREE.Group(); deck.position.set(run / 2, BELT_Y + rise / 2, 0); deck.rotation.z = ang; root.add(deck);
+  const tex = beltTexture().clone(); tex.needsUpdate = true; tex.repeat.set(len / 0.45, 1);
+  const bm = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9, flatShading: true }); bm.userData.lowpoly = true;
+  const belt = box(len, 0.04, W, bm, 0, -0.02, 0, deck);
+  [-1, 1].forEach((s) => { box(len + 0.08, 0.18, 0.07, L.green, 0, -0.06, s * (W / 2 + 0.05), deck); box(len + 0.08, 0.035, 0.11, L.yellow, 0, 0.045, s * (W / 2 + 0.05), deck); });
+  [-len / 2, len / 2].forEach((x) => cylZ(0.07, W + 0.06, 10, L.steel, x, -0.06, 0, deck));
+  // legs: vertical pairs from the ground up to the underside of the deck
+  [0.08, 0.5, 0.92].forEach((t) => { const x = run * t, top = BELT_Y + rise * t - 0.12; [-1, 1].forEach((s) => { box(0.07, top, 0.07, L.steelD, x, top / 2, s * (W / 2 + 0.05), root); cyl(0.07, 0.03, 8, L.dark, x, 0.015, s * (W / 2 + 0.05), root); }); box(0.05, 0.05, W + 0.16, L.steelD, x, top * 0.5, 0, root); });
+  const lip = box(0.3, 0.02, W, L.steel, run + 0.12, BELT_Y + rise - 0.04, 0, root); lip.rotation.z = -0.4;
+  bake(root, [deck]); bake(deck, [belt]);
+  return { root, tex, run, rise, len, move(d) { tex.offset.x -= d / 0.45; } };
 }

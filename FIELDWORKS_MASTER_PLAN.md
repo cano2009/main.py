@@ -24,7 +24,7 @@ Before integrating, step 1 of the prompt still has to happen: inspect the real p
 |---|---|
 | 6. Crops | 19 soft-shaded crops with the full 7-stage cycle and two levels of detail, plus harvested items. Soil states for plowing and sowing. |
 | 7, 11. Machinery and transport | Tractor with plow, seeder, harvester and a tipping trailer. Implements couple through hitch ports; towed ones articulate behind the drawbar. The harvest is augered into the trailer, hauled and tipped into the hopper. |
-| 8. Production chain | Wheat to flour to bread to crates, and corn to cornmeal, fed by the sorter and sold as pallets. |
+| 8. Production chain | Wheat to flour to bread to crates, and corn to cornmeal. The sorter pushes grain onto a cross belt and a grain elevator that feeds the mill's top hopper, all joined port to port. |
 | 12. Buildings | Barn, warehouse and greenhouse: complete models with snapping placement, rotation, blocked-placement reasons, colliders and removal. |
 | 20. Saving | Autosave with a backup copy and validation on load. |
 | 3, 16. Validation | Every new model passes the validator (0 errors, 0 warnings). It found and fixed a floating tractor front axle, harvester wheels with no axle, oven walls 27 cm above their base, and an unmounted mill motor. |

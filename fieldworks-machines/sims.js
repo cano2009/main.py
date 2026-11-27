@@ -684,7 +684,7 @@ export class TractorSim extends Unit {
 export const CHAIN_DEF = {
   id: 'chain', name: 'Food Production', short: 'Food line', type: 'Mill, oven and bagger', brand: 'Fieldworks Processing', model: 'FW-FP2', category: 'Processing',
   levels: [{ level: 1, millS: 4, bakeS: 10, cost: 0, parts: [] }, { level: 2, millS: 3, bakeS: 7, cost: 8000, parts: ['Steel rollers', 'Second heating zone'] }, { level: 3, millS: 2, bakeS: 5, cost: 16000, parts: ['Twin mill', 'Convection oven'] }],
-  belt: 0.4, gap: 0.5, lengths: { cross: 3.4, milled: 2.6, baked: 2.2 }, millIn: 2, packN: 4, palletCrates: 12,
+  belt: 0.4, gap: 0.5, lengths: { cross: 4.37, milled: 2.6, baked: 2.2 }, crossFlat: 1.9, millIn: 2, packN: 4, palletCrates: 12,
   value: { flour: 6, cornmeal: 5, bread: 11 }, kw: { mill: 4, oven: 6, bagger: 1, belts: 0.6 }, wearPerHour: 3, repairCostPerPct: 12
 };
 export class ChainSim extends Unit {
@@ -744,7 +744,7 @@ export const LINE_DEF = {
     { level: 3, beltSpeed: 0.7, packSize: 8, cost: 12000, parts: ['Belt motors 0.75 kW x3', 'Eight-pack press head', 'Optical sorter'] }
   ],
   waterPerItemL: 3, pressS: 2.4, palletBoxes: 12, gap: 0.42, wearPerHour: 4, repairCostPerPct: 10,
-  zones: { wash: 4.6, cut: 8.6, pack: 12.0 }, kw: { belts: 1.1, washer: 1.1, cutter: 2.2, packer: 1.5 }
+  zones: { wash: 4.6, cut: 8.6, divert: 9.35, pack: 12.0 }, kw: { belts: 1.1, washer: 1.1, cutter: 2.2, packer: 1.5 }
 };
 export class LineSim extends Unit {
   constructor() {
@@ -782,7 +782,9 @@ export class LineSim extends Unit {
       const it = this.items[i], limit = i === 0 ? (packOpen ? Z.pack + 1 : Z.pack - 0.25) : this.items[i - 1].s - D.gap;
       it.s = Math.min(limit, it.s + v * dt);
       if (!it.washed && it.s >= Z.wash && !it.tried) { it.tried = true; const got = tank ? tank.draw(D.waterPerItemL) : D.waterPerItemL; this.waterL += got; if (got >= D.waterPerItemL * 0.99) { it.washed = true; this.washed++; } else this.unwashed++; }
-      if (!it.cut && it.s >= Z.cut) { it.cut = true; if (this.divert && CROPS[it.crop] && CROPS[it.crop].grain && this.divert(it.crop)) { it.diverted = true; this.toChain = (this.toChain || 0) + 1; } }
+      if (!it.cut && it.s >= Z.cut) it.cut = true;
+      // the diverter sits at the sorter exit: grain is pushed sideways onto the grain conveyor (if it has room)
+      if (!it.divTried && it.s >= Z.divert && this.divert && CROPS[it.crop] && CROPS[it.crop].grain) { it.divTried = true; if (this.divert(it.crop)) { it.diverted = true; this.toChain = (this.toChain || 0) + 1; this.pushT = 0.6; } }
     }
     this.items = this.items.filter((it) => !it.diverted);
     while (this.items.length && this.items[0].s >= Z.pack) this.packBuf.push(this.items.shift());
