@@ -127,8 +127,10 @@ export function seeder() {
   }
   // fold-up row markers
   [-1, 1].forEach((s) => { strut(root, new V(s * 1.0, 0.12, -0.62), new V(s * 1.08, 0.95, -0.62), 0.05, T.yellow); cylX(0.12, 0.03, 8, T.steel, s * 1.1, 0.97, -0.62, root); });   // row markers folded up for transport
-  bake(root, []);
-  return { root, wheels: [], units, liftDown: 0.0, liftUp: 0.25 };
+  // press wheels and opening discs roll with the ground (the Blender model fills these groups)
+  const rolls = units.map((u, i) => { const g = new THREE.Group(); g.position.set(-0.75 + i * 0.5, -0.27, -1.25); root.add(g); return g; });
+  bake(root, rolls);
+  return { root, wheels: rolls, rolls, units, liftDown: 0.0, liftUp: 0.25 };
 }
 export function harvester() {
   const root = new THREE.Group(); root.name = 'Harvester'; root.userData.pick = 'tractor';

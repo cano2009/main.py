@@ -1411,6 +1411,9 @@ MD.swap(sa.root, 'models/py_solar.glb', { attach: { table: sa.table }, keep: (m)
 // vehicles: body and wheel nodes go into the game's own groups (driving, steering and tipping stay exact); lamps, the
 // beacon, the trailer load and its tipping ram are the game's
 MD.swap(trac.root, 'models/vh_tractor.glb', { attach: { body: trac.body, w_rear0: trac.rear[0], w_rear1: trac.rear[1], w_front0: trac.front[0].w, w_front1: trac.front[1].w }, keep: (m) => under(m, [...trac.heads, trac.beacon]) });
+MD.swap(IMPL.plow.root, 'models/im_plow.glb', { attach: { dw: IMPL.plow.wheels[0] } });
+MD.swap(IMPL.seeder.root, 'models/im_seeder.glb', { attach: Object.fromEntries(IMPL.seeder.rolls.map((g, i) => ['roll' + i, g])) });
+{ const H = IMPL.harvester; MD.swap(H.root, 'models/im_harvester.glb', { attach: { reel: H.reel, w0: H.wheels[0], w1: H.wheels[1] }, keep: (m) => under(m, [H.fill]) }); }
 { const T = IMPL.trailer; MD.swap(T.root, 'models/vh_trailer.glb', { attach: { bed: T.bed, w0: T.wheels[0], w1: T.wheels[1], w2: T.wheels[2], w3: T.wheels[3] }, keep: (m) => under(m, [T.load, T.ram]) }); }
 { const old = []; tr.wheels.forEach((w) => w.g.traverse((o) => { if (o.isMesh) old.push(o); }));   // the physics vehicle moved the wheels out of the truck group
   MD.swap(tr.root, 'models/vh_truck.glb', { attach: { body: tr.body, wheel0: tr.wheels[0].g, wheel1: tr.wheels[1].g, wheel2: tr.wheels[2].g, wheel3: tr.wheels[3].g }, keep: (m) => under(m, tr.headlights) }).then((r) => { if (r) old.forEach((o) => { o.visible = false; }); }); }
