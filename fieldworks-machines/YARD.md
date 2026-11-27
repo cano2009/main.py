@@ -21,6 +21,28 @@
 
 World controls: time of day, simulation speed (1x, 10x, 60x), wind (calm to storm), weather (clear, cloudy, rain), and physics drops. Night uses its own colour grade and the yard lights only work while their circuit has power.
 
+## Farm to sale (crops and the processing line)
+
+![Processing line](images/yard_line.png)
+
+| Part | What it does | Files |
+|---|---|---|
+| Crop field | Radish, carrot, wheat, cabbage, pumpkin or corn. Plants grow through four stages, but only while the soil is wet: the drone waters them. Ready plants are harvested into the hopper (automatically at 90% ready) and the field is replanted. | `lpcrops.js` `stages()`, `sims.js` `FieldSim` |
+| Harvest hopper | Holds the harvest and feeds the belt. | `line.js` `bin()` |
+| Conveyors | Green channel frame with yellow lips, end rollers, cleated belt (moves with the belt speed), A-frame legs, drive motor. | `conveyor()` |
+| Drum washer | Slatted drum that turns on cradle rollers, spray bar, water tank with a sight glass. Each item uses 3 L from the yard's storage tank; with no water it passes unwashed and sells for 60%. | `washer()` |
+| Optical sorter | Gantry with a camera head and light bars, brush diverter, reject chute and bin. Sorted produce sells for 25% more. | `cutter()` |
+| Carton packer | Two towers and a carriage that folds and tapes each carton, with a magazine of flat cartons. Boxes stack on the pallet; a full pallet (12 boxes) is sold. | `packer()`, `pallet()`, `sims.js` `LineSim` |
+| Extras | Stainless sink station and a drinks cooler (lit when the lights circuit has power). | `washTable()`, `vendingMachine()` |
+
+The line has its own breaker on the distribution panel and is shed second when power runs short (after the lights).
+Harvested items come from `lpcrops.js` `item(crop, dirty)`: each one turns from dirty to clean as it leaves the washer.
+
+## Look and sharpness
+
+- No ink outlines by default (`STYLE.outline` in `lowpoly.js`); clean faceted shapes with matte colours.
+- The page renders at the screen's full resolution (up to 2x). Automatic downscaling stays off on computers, and on phones it never goes below 85%.
+
 ## The low-poly style (`lowpoly.js`)
 
 - `stylize(root)`: flat-shaded materials, photo maps removed, canvas screens and labels kept, and outlines made from inverted hulls with smoothed normals. Outlines stay at least about 1.3 px wide at any distance.

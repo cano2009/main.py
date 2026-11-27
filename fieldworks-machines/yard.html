@@ -153,7 +153,9 @@ import { createGraphics, GRADES } from './graphics.js';
 import { createGlow } from './glow.js';
 import { createOutlines } from './outline.js';
 import { Generator, GEN_DEF, buildGenerator } from './generator.js';
-import { WindTurbine, SolarArray, StorageTank, PumpJack, SprayDrone, PowerGrid } from './sims.js';
+import { WindTurbine, SolarArray, StorageTank, PumpJack, SprayDrone, PowerGrid, FieldSim, LineSim, CROPS } from './sims.js';
+import * as LN from './line.js';
+import * as LP from './lpcrops.js';
 import { money } from './machine.js';
 import * as P from './parts.js';
 import * as Y from './yard.js';
@@ -169,9 +171,10 @@ let envMats = null, lastDay = -1;            // materials whose reflections dim 
 const POS = {
   wind: new V(-20, 0, -14), solar: new V(-11, 0, 5), tank: new V(12, 0, -7), pump: new V(21, 0, -2), pad: new V(8.5, 0, 3),
   gen: new V(5.5, 0, -9.2), bess: new V(-1.2, 0, -11.2), panel: new V(-1.2, 0, -7.2), xfmr: new V(-8, 0, -9.5),
-  tower1: new V(-10, 0, -25), tower2: new V(-10, 0, -58), trough: new V(15.5, 0, -11), truck: new V(-3, 0, 12)
+  tower1: new V(-10, 0, -25), tower2: new V(-10, 0, -58), trough: new V(15.5, 0, -11), truck: new V(-9, 0, 14)
 };
 const FIELD = { x0: 14, x1: 30, z0: 6, z1: 18 };
+const LZ = 13, LX0 = 11.8;                    // processing line: belt runs along x at z = LZ, items move from x = LX0 toward -x
 
 // ---------- renderer, scene, camera ----------
 const host = $('viewport');
@@ -190,6 +193,8 @@ controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.47; controls
 const touch = matchMedia('(pointer: coarse)').matches || innerWidth < 700;
 const gfx = createGraphics({ renderer, scene, camera, sun, storageKey: 'fw.yard.gfx' });
 gfx.setPreset(qs.get('preset') || (touch ? 'medium' : 'high'));
+// sharp image: full device resolution (up to 2x), no automatic downscaling on desktop
+gfx.set({ maxPixelRatio: touch ? 2 : 2, renderScale: 1, adaptive: touch && !qs.get('sharp') });
 gfx.setGrade('farm', 0);
 gfx.setEnvironment('room');
 const glow = createGlow({ scene, quality: touch ? 'low' : 'medium' });
@@ -256,7 +261,41 @@ const nature = new THREE.Group(), grass = new THREE.Group();
   nature.add(fence);
 })();
 const natureMerged = mergeByMaterial(nature); stylize(natureMerged, { minSize: 0.3, thickness: 0.03 }); scene.add(natureMerged, mergeByMaterial(grass));
-const field = Y.cropField(FIELD, scene);
+// crop field: soil bed and ridges, plants drawn by growth stage (one instanced mesh per stage)
+{ const W = FIELD.x1 - FIELD.x0, D = FIELD.z1 - FIELD.z0, cx = (FIELD.x0 + FIELD.x1) / 2, cz = (FIELD.z0 + FIELD.z1) / 2;
+  const soil = Y.box(W + 0.6, 0.1, D + 0.6, Y.flat('#7a5636', { roughness: 1 }), cx, 0.03, cz, scene); soil.castShadow = false;
+  const rows = Math.round(D / 0.5), g = []; for (let j = 0; j < rows; j++) g.push(new THREE.BoxGeometry(W, 0.1, 0.26).translate(cx, 0.1, FIELD.z0 + (j + 0.5) * D / rows));
+  const ridge = new THREE.Mesh(mergeBufferGeometries(g, false), Y.flat('#8a6340', { roughness: 1 })); ridge.receiveShadow = true; scene.add(ridge); }
+const fieldSim = new FieldSim(FIELD);
+let fieldMeshes = [];
+const fM4 = new THREE.Matrix4(), fQ = new THREE.Quaternion(), fS = new V(), fP = new V(), fC = new THREE.Color(), DRY = new THREE.Color(1.0, 0.84, 0.5), UP = new V(0, 1, 0);
+function buildFieldMeshes() {
+  fieldMeshes.forEach((m) => scene.remove(m));
+  fieldMeshes = LP.stages(fieldSim.crop).map((geo) => { const m = new THREE.InstancedMesh(geo, LP.material(), fieldSim.plants.length); m.castShadow = true; m.receiveShadow = true; m.count = 0; scene.add(m); return m; });
+  paintField();
+}
+function paintField() {
+  const cnt = [0, 0, 0, 0];
+  fieldSim.used.forEach((p) => {
+    const st = fieldSim.stageOf(p), m = fieldMeshes[st], i = cnt[st]++;
+    fQ.setFromAxisAngle(UP, p.rot); fS.setScalar(1.55 * p.size * (st === 3 ? 1 : 0.8 + Math.min(1, p.g) * 0.25));   // drawn a little larger than life so rows read from the yard fM4.compose(fP.set(p.x, 0.15, p.z), fQ, fS); m.setMatrixAt(i, fM4);
+    fC.setRGB(1, 1, 1).lerp(DRY, 1 - Math.min(1, p.wet * 2.2)).multiplyScalar(0.92 + p.shade * 0.16); m.setColorAt(i, fC);
+  });
+  fieldMeshes.forEach((m, k) => { m.count = cnt[k]; m.instanceMatrix.needsUpdate = true; if (m.instanceColor) m.instanceColor.needsUpdate = true; });
+}
+buildFieldMeshes();
+const field = fieldSim;
+
+// ---------- processing line (washer, cutter and sorter, packer) ----------
+const lineG = new THREE.Group(); lineG.position.set(0, 0, LZ); scene.add(lineG);
+const belt = LN.conveyor(LX0, 0.2); lineG.add(belt.root);
+const wsh = LN.washer(); lineG.add(wsh.root);
+const cut = LN.cutter(); lineG.add(cut.root);
+const pak = LN.packer(); lineG.add(pak.root);
+const pal = LN.pallet(); pal.root.position.x = -1.75; lineG.add(pal.root);
+const hbin = LN.bin(); hbin.root.position.x = LX0 + 0.75; lineG.add(hbin.root);
+const washT = LN.washTable(); washT.root.position.set(2.2, 0, LZ - 1.6); washT.root.rotation.y = Math.PI; scene.add(washT.root);
+const vend = LN.vendingMachine(); vend.root.position.set(-8.3, 0, -1.2); vend.root.rotation.y = 0.35; scene.add(vend.root);
 
 // ---------- machines ----------
 const tw = Y.windTurbine(); tw.root.position.copy(POS.wind); tw.root.rotation.y = 0.5; scene.add(tw.root);
@@ -266,7 +305,7 @@ const pj = Y.pumpJack(); pj.root.position.copy(POS.pump); scene.add(pj.root);
 const dr = Y.sprayDrone(); scene.add(dr.root);
 const pad = Y.dronePad(); pad.root.position.copy(POS.pad); scene.add(pad.root);
 const bess = Y.batteryContainer(); bess.root.position.copy(POS.bess); scene.add(bess.root);
-const CIRCUITS = ['pump', 'charger', 'lights'];
+const CIRCUITS = ['pump', 'charger', 'line', 'lights'];
 const dp = Y.distributionPanel(CIRCUITS); dp.root.position.copy(POS.panel); scene.add(dp.root);
 const xf = Y.transformer(); xf.root.position.copy(POS.xfmr); xf.root.rotation.y = Math.PI; scene.add(xf.root);
 const t1 = Y.latticeTower(17); t1.root.position.copy(POS.tower1); scene.add(t1.root);
@@ -284,7 +323,7 @@ const lamps = [new V(2.5, 0, -2), new V(10.5, 0, -3.2), new V(-5, 0, 1.5), new V
   l.light = light; l.lens.material = l.lens.material.clone(); return l;
 });
 tr.headlights.forEach((m) => { m.material = m.material.clone(); });
-[tw.root, sa.root, tk.root, pj.root, dr.root, pad.root, bess.root, dp.root, xf.root, t1.root, t2.root, trough.root, gen.root, tr.root, ...lamps.map((l) => l.root)].forEach((r) => stylize(r));
+[tw.root, sa.root, tk.root, pj.root, dr.root, pad.root, bess.root, dp.root, xf.root, t1.root, t2.root, trough.root, gen.root, tr.root, ...lamps.map((l) => l.root), lineG, washT.root, vend.root].forEach((r) => stylize(r));
 
 // ---------- power lines and pipes (merged into a few meshes at the end) ----------
 const wireG = new THREE.Group(), pipeG = new THREE.Group();
@@ -332,14 +371,17 @@ gG.strip({ from: new V(0.3, 1.38, 0.583), to: new V(0.8, 1.38, 0.583), width: 0.
 const fx = Y.sprayFX(scene);
 
 // selectable roots
-const KEY_OF = new Map([[tw.root, 'wind'], [sa.root, 'solar'], [tk.root, 'tank'], [pj.root, 'pump'], [dr.root, 'drone'], [pad.root, 'drone'], [bess.root, 'grid'], [dp.root, 'grid'], [xf.root, 'grid'], [gen.root, 'gen'], [tr.root, 'truck']]);
+const KEY_OF = new Map([[tw.root, 'wind'], [sa.root, 'solar'], [tk.root, 'tank'], [pj.root, 'pump'], [dr.root, 'drone'], [pad.root, 'drone'], [bess.root, 'grid'], [dp.root, 'grid'], [xf.root, 'grid'], [gen.root, 'gen'], [tr.root, 'truck'], [wsh.root, 'line'], [cut.root, 'line'], [pak.root, 'line'], [pal.root, 'line'], [hbin.root, 'field']]);
 KEY_OF.forEach((_, o) => outlines.register(o));
-const ROOT_OF = { wind: tw.root, solar: sa.root, tank: tk.root, pump: pj.root, drone: dr.root, gen: gen.root, grid: dp.root, truck: tr.root };
+const ROOT_OF = { wind: tw.root, solar: sa.root, tank: tk.root, pump: pj.root, drone: dr.root, gen: gen.root, grid: dp.root, truck: tr.root, line: cut.root, field: hbin.root };
 
 // ---------- simulations ----------
 const wind = new WindTurbine(), solar = new SolarArray(), tank = new StorageTank(), pump = new PumpJack();
 const drone = new SprayDrone(FIELD, { x: POS.pad.x, z: POS.pad.z });
 const grid = new PowerGrid();
+const lineSim = new LineSim(); ['radish', 'carrot', 'wheat', 'cabbage', 'pumpkin', 'corn'].forEach((c) => lineSim.addToBin(c, 2, CROPS[c].value));
+const ZX = (s) => LX0 - s;   // belt distance -> x
+wsh.root.position.x = ZX(lineSim.def.zones.wash); cut.root.position.x = ZX(lineSim.def.zones.cut); pak.root.position.x = ZX(lineSim.def.zones.pack) - 0.1;
 const gsim = new Generator(GEN_DEF, false); gsim.on = false; gsim.log = [];
 const TROUGH_LPM = 10, LIGHT_KW = 0.7;
 let wallet = 12000, hour = 12.5, speed = 1, clockRuns = true, windBase = 6, weather = 'clear', gameT = 0;
@@ -360,7 +402,7 @@ function updateEnv() {
 function loads() {
   const pumpReq = pump.on && !pump.fault ? (tank.accepts() ? pump.level.motorKw * (0.6 + 0.4 * Math.max(pump.spmNow, pump.level.spm * 0.3) / pump.level.spm) / pump.efficiency() : 0.08) : 0.02;
   const charger = drone.on && drone.state === 'charge' && drone.battPct() < 0.995 ? drone.def.chargeKw : 0.03;
-  return { pump: pumpReq, charger, lights: env.dark ? LIGHT_KW : 0.04 };
+  return { pump: pumpReq, charger, line: lineSim.powerKw(), lights: env.dark ? LIGHT_KW + 0.25 : 0.25 };   // lights circuit also feeds the vending machine
 }
 let refillLpm = 0, autoMissionT = 0;
 function simStep(dt) {
@@ -368,12 +410,14 @@ function simStep(dt) {
   updateEnv();
   wind.tick(dt, env); solar.tick(dt, env);
   wallet += grid.tick(dt, wind.output, solar.output, loads(), gsim);
-  pump.powered = grid.powered.pump; drone.powered = grid.powered.charger;
+  pump.powered = grid.powered.pump; drone.powered = grid.powered.charger; lineSim.powered = grid.powered.line;
   pump.tick(dt, env, tank);
   const troughL = tank.draw(TROUGH_LPM * dt / 60);
   const before = drone.liquidL; drone.tick(dt, env, tank); refillLpm = Math.max(0, drone.liquidL - before) / dt * 60;
   tank.tick(dt, pump.flowLpm, troughL / dt * 60 + refillLpm);
-  field.update(dt, drone.pos, drone.level.swath, drone.spraying);
+  fieldSim.tick(dt, drone.pos, drone.level.swath, drone.spraying);
+  if (fieldSim.autoHarvest && fieldSim.ripe() > 0.9 && lineSim.bin.length < 40) { const c = fieldSim.crop, n = fieldSim.harvest(); lineSim.addToBin(c, n, CROPS[c].value); if (n) toast(`Harvested ${n} ${CROPS[c].name.toLowerCase()} into the line's bin`); }
+  wallet += lineSim.tick(dt, tank);
   if (drone.state === 'done' && field.wetness() < 0.45) { autoMissionT += dt; if (autoMissionT > 20) { autoMissionT = 0; drone.newMission(); toast('The field is drying out: the drone starts a new spray mission'); } } else autoMissionT = 0;
 }
 
@@ -393,6 +437,8 @@ addStatic(box3(1.1, 0.45, 0.4), POS.trough.x, 0.45, POS.trough.z);
 [-1.95, 0, 1.95].forEach((x) => addStatic(box3(0.3, 0.15, 0.45), POS.solar.x + x, 0.15, POS.solar.z));
 [[0, -1, 0, 0], [0, 1, 0, 0], [-1, 0, 0, 0], [1, 0, 0, 0]].forEach(([sx, sz]) => { if (sx) addStatic(box3(0.5, 2, 30), sx * 36, 2, -2); else addStatic(box3(40, 2, 0.5), 0, 2, sz > 0 ? 25 : -30); });
 [[FIELD.x0 - 0.8, (FIELD.z0 + FIELD.z1) / 2 + 2, 0.08, (FIELD.z1 - FIELD.z0) / 2 - 1.2], [FIELD.x1 + 0.8, (FIELD.z0 + FIELD.z1) / 2, 0.08, (FIELD.z1 - FIELD.z0) / 2 + 0.8], [(FIELD.x0 + FIELD.x1) / 2, FIELD.z0 - 0.8, (FIELD.x1 - FIELD.x0) / 2 + 0.8, 0.08], [(FIELD.x0 + FIELD.x1) / 2, FIELD.z1 + 0.8, (FIELD.x1 - FIELD.x0) / 2 + 0.8, 0.08]].forEach(([x, z, hx, hz]) => addStatic(box3(hx, 0.55, hz), x, 0.55, z));
+addStatic(box3(6.35, 0.5, 0.62), (LX0 + 0.55) / 2, 0.5, LZ); addStatic(box3(0.7, 0.75, 0.7), ZX(12) - 0.15, 0.75, LZ); addStatic(box3(0.6, 0.55, 0.6), LX0 + 0.75, 0.55, LZ); addStatic(box3(0.6, 0.3, 0.6), -1.75, 0.3, LZ);
+addStatic(box3(0.5, 0.95, 0.4), -8.3, 0.95, -1.2, 0.35); addStatic(box3(0.5, 0.6, 0.35), 2.2, 0.6, LZ - 1.6);
 const props = [];
 function addProp(kind, x, y, z, o) {
   o = o || {};
@@ -413,8 +459,8 @@ function addProp(kind, x, y, z, o) {
 }
 [[3, 0.35, 6.5], [3.75, 0.35, 6.4], [3.35, 1.06, 6.45], [4.5, 0.35, 7.3]].forEach(([x, y, z], i) => addProp('crate', x, y, z, { ry: i * 0.2 }));
 [['#2e6aa8', 8.3, -9.6], ['#d6402c', 8.95, -9.4], ['#2e6aa8', 8.6, -10.2], ['#e5b833', 9.3, -10.1]].forEach(([c, x, z]) => addProp('barrel', x, 0.44, z, { color: c }));
-for (let i = 0; i < 8; i++) addProp('pumpkin', 11.3 + (i % 3) * 0.55, 0.25 + Math.floor(i / 5) * 0.45, 9.5 + Math.floor(i / 3) * 0.55, { seed: i + 3 });
-[[-1, 0.6, 8], [0.4, 0.6, 8.6], [-0.3, 1.8, 8.3]].forEach(([x, y, z], i) => addProp('hay', x, y, z, { ry: 0.3 + i * 0.4 }));
+for (let i = 0; i < 8; i++) addProp('pumpkin', -4.6 + (i % 3) * 0.55, 0.25 + Math.floor(i / 5) * 0.45, 9.0 + Math.floor(i / 3) * 0.55, { seed: i + 3 });
+[[-6.5, 0.6, 8], [-5.1, 0.6, 8.6], [-5.8, 1.8, 8.3]].forEach(([x, y, z], i) => addProp('hay', x, y, z, { ry: 0.3 + i * 0.4 }));
 // drone: kinematic body that pushes props out of its way
 const droneBody = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, shape: new CANNON.Sphere(0.85) }); W.addBody(droneBody);
 // truck on raycast suspension
@@ -529,17 +575,25 @@ function drawScreens() {
 }
 
 // ---------- UI ----------
-const KEYS = ['overview', 'wind', 'solar', 'tank', 'pump', 'drone', 'gen', 'grid', 'truck'];
-const NAMES = { overview: 'Whole yard', wind: 'Wind turbine', solar: 'Solar array', tank: 'Water tank', pump: 'Pump jack', drone: 'Spray drone', gen: 'Generator', grid: 'Power network', truck: 'Truck' };
+const KEYS = ['overview', 'field', 'line', 'drone', 'pump', 'tank', 'wind', 'solar', 'gen', 'grid', 'truck'];
+const NAMES = { overview: 'Whole yard', wind: 'Wind turbine', solar: 'Solar array', tank: 'Water tank', pump: 'Pump jack', drone: 'Spray drone', gen: 'Generator', grid: 'Power network', truck: 'Truck', field: 'Crop field', line: 'Processing line' };
 $('picker').innerHTML = KEYS.map((k) => `<button type="button" class="pick" id="pick-${k}" aria-pressed="${k === 'overview'}">${k === 'overview' ? '' : `<span class="dot" id="dot-${k}"></span>`}${NAMES[k]}</button>`).join('');
-const SIMS = { wind, solar, tank, pump, drone, gen: gsim, grid, truck: truckSim };
+fieldSim.act = (id) => {
+  if (id === 'harvest') { const c = fieldSim.crop, n = fieldSim.harvest(); if (!n) return { msg: 'Nothing is ready yet' }; lineSim.addToBin(c, n, CROPS[c].value); return { msg: `Harvested ${n} ${CROPS[c].name.toLowerCase()} into the line's bin` }; }
+  if (id === 'auto') { fieldSim.autoHarvest = !fieldSim.autoHarvest; return { msg: `Auto harvest ${fieldSim.autoHarvest ? 'on' : 'off'}` }; }
+  if (id.startsWith('crop-')) { fieldSim.setCrop(id.slice(5)); buildFieldMeshes(); return { msg: `Field replanted with ${CROPS[fieldSim.crop].name.toLowerCase()}` }; }
+  return { msg: '' };
+};
+const SIMS = { wind, solar, tank, pump, drone, gen: gsim, grid, truck: truckSim, field: fieldSim, line: lineSim };
 const STC = { running: 'var(--ok)', waiting: 'var(--warn)', stopped: 'var(--bad)', off: 'var(--off)' };
 let toastT = 0;
 function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), 2800); }
 let selected = 'overview', tab = 'overview', inspecting = false;
 const TABS = ['overview', 'performance', 'resources', 'upgrades', 'operation'];
 const VIEWS = {
-  overview: { pos: [22, 19, 33], tgt: [-1, 3, -7] },
+  overview: { pos: [26, 21, 38], tgt: [2, 2, -2] },
+  field: { pos: [14, 9, 26], tgt: [21, 0.5, 12] },
+  line: { pos: [6, 5.5, 21.5], tgt: [5, 1, 13] },
   wind: { pos: [-6, 9, 4], tgt: [-20, 8.5, -14] },
   solar: { pos: [-4.5, 4.2, 12.5], tgt: [-10.5, 1.2, 5] },
   tank: { pos: [18.5, 5.2, 0.5], tgt: [12, 2.4, -7] },
@@ -550,6 +604,8 @@ const VIEWS = {
   truck: null
 };
 const NOTES = {
+  field: 'Plants grow through four stages, but only while the soil is wet: the spray drone waters them. Ready plants are harvested into the bin at the start of the processing line (automatically at 90% ready, or with Harvest now) and the field is replanted. Pick a different crop to replant it.',
+  line: 'Harvested crops ride the belt through the washer (3 L of tank water each, so the pump jack has to keep up), the cutter and sorter, and the packer, which presses them into boxes on the pallet. A full pallet is sold. The line runs on its own circuit: when power is short it is the second thing to be shed. Unwashed produce sells for less.',
   overview: 'A working yard where everything is connected. The wind turbine and solar array feed the power network. The battery stores what is spare, the diesel set starts on its own when both run short, and anything left over is sold to the utility through the transmission line. The pump jack lifts well water into the tank, the drone refills from it, charges from the network and sprays the field lane by lane. Try a calm night: watch the battery drain, the diesel start, and the lights go out first if power runs short.',
   wind: 'Power comes from the wind through the rotor: it rises with the cube of the wind speed until the rated output, then the blades pitch to hold it there. Below 3 m/s it waits, and in a storm above 24 m/s it feathers the blades and brakes. The nacelle turns to face the wind at 4 degrees a second.',
   solar: 'Output follows the sun\'s angle on the modules, the light reaching them (weather), cell temperature and dust. Clean the panels when output drops. At level 3 the tracker tilts the table to follow the sun.',
@@ -616,7 +672,7 @@ function overviewPanel() {
   const bad = order.map((k) => [k, SIMS[k].status()]).find(([, s]) => s === 'stopped');
   return {
     status: bad ? 'stopped' : grid.status(), reason: bad ? `${NAMES[bad[0]]}: ${SIMS[bad[0]].reason()}` : grid.reason(),
-    strip: [{ k: 'Generating', v: f1(F.renew + F.diesel) + ' kW' }, { k: 'Load', v: f1(F.served) + ' kW' }, { k: 'Battery', v: Math.round(socP * 100) + '%', f: socP, c: 'var(--ok)' }, { k: 'Water tank', v: Math.round(tank.frac() * 100) + '%', f: tank.frac(), c: 'var(--water)' }, { k: 'Field wet', v: Math.round(field.wetness() * 100) + '%', f: field.wetness(), c: 'var(--ok)' }, { k: 'Sold power', v: money(grid.earned) }],
+    strip: [{ k: 'Generating', v: f1(F.renew + F.diesel) + ' kW' }, { k: 'Load', v: f1(F.served) + ' kW' }, { k: 'Battery', v: Math.round(socP * 100) + '%', f: socP, c: 'var(--ok)' }, { k: 'Water tank', v: Math.round(tank.frac() * 100) + '%', f: tank.frac(), c: 'var(--water)' }, { k: 'Field', v: Math.round(fieldSim.growth() * 100) + '% grown', f: fieldSim.growth(), c: 'var(--ok)' }, { k: 'Produce sold', v: money(lineSim.earned) }, { k: 'Power sold', v: money(grid.earned) }],
     actions: [{ id: 'mission', label: 'Send the drone out', disabled: drone.state !== 'done', primary: drone.state === 'done' }]
   };
 }
@@ -697,9 +753,9 @@ function applyLighting() {
   const up = e > -0.02;
   const dir = up ? env.sunDir : new V(-env.sunDir.x, -env.sunDir.y, -env.sunDir.z * 0.5).normalize();
   sun.position.copy(sun.target.position).addScaledVector(dir, 90);
-  sun.intensity = up ? 2.35 * THREE.MathUtils.smoothstep(e, -0.02, 0.18) * (1 - wf * 0.75) : 0.22;
+  sun.intensity = up ? 2.1 * THREE.MathUtils.smoothstep(e, -0.02, 0.18) * (1 - wf * 0.75) : 0.22;
   sun.color.setRGB(1, up ? 0.92 - sunset * 0.35 : 0.8, up ? 0.8 - sunset * 0.45 : 1).multiplyScalar(up ? 1 : 0.6);
-  hemi.intensity = 0.1 + 0.6 * day; dimReflections(day);
+  hemi.intensity = 0.12 + 0.85 * day; dimReflections(day);
   const mode = e < -0.04 ? 'night' : e < 0.12 ? 'dusk' : 'farm';
   if (mode !== gradeMode) { gradeMode = mode; gfx.setGrade(mode === 'night' ? NIGHT_GRADE : GRADES[mode], 2.5); } hemi.color.copy(tmpC2).lerp(new THREE.Color(1, 1, 1), 0.4);
   const lit = grid.powered.lights && env.dark;
@@ -708,6 +764,37 @@ function applyLighting() {
   cloudMat.color.setRGB(1, 1, 1).multiplyScalar((0.35 + 0.65 * day) * (weather === 'rain' ? 0.6 : 1));
   clouds.forEach((c, i) => { c.visible = i < (weather === 'clear' ? 4 : 12); });
   rain.visible = weather === 'rain';
+}
+
+// ---------- processing line visuals ----------
+const itemMeshes = new Map(), binPile = [];
+const gWsh = glow.attach(wsh.root, { state: 'running' }); gWsh.led({ position: wsh.ledAt, size: 0.03 });
+const gCut = glow.attach(cut.root, { state: 'running' }); gCut.stackLight({ position: new V(0.15, 1.96, -0.6), radius: 0.035, segment: 0.07 });
+const gPak = glow.attach(pak.root, { state: 'running' }); gPak.stackLight({ position: pak.ledAt, radius: 0.035, segment: 0.07 });
+for (let i = 0; i < 8; i++) { const m = new THREE.Mesh(LP.item('radish', true), LP.material()); m.castShadow = true; m.position.set(LX0 + 0.75 + ((i % 3) - 1) * 0.22, 1.02, LZ + (Math.floor(i / 3) - 1) * 0.22); m.rotation.y = i * 1.3; m.visible = false; scene.add(m); binPile.push(m); }
+let gearSpin = 0;
+function animateLine(dt) {
+  const run = lineSim.running(), v = run ? lineSim.level.beltSpeed * lineSim.efficiency() * speed : 0;
+  belt.move(v * dt);
+  const seen = new Set();
+  lineSim.items.forEach((it) => {
+    let m = itemMeshes.get(it.id);
+    if (!m) { m = new THREE.Mesh(LP.item(it.crop, true), LP.material()); m.castShadow = true; m.rotation.y = it.rot; scene.add(m); itemMeshes.set(it.id, m); m.userData.clean = false; }
+    if (it.washed && !m.userData.clean) { m.geometry = LP.item(it.crop, false); m.userData.clean = true; }
+    m.position.set(ZX(it.s), LN.BELT_Y + 0.005, LZ + it.z);
+    seen.add(it.id);
+  });
+  itemMeshes.forEach((m, id) => { if (!seen.has(id)) { scene.remove(m); itemMeshes.delete(id); } });
+  binPile.forEach((m, i) => { m.visible = i < Math.min(8, Math.ceil(lineSim.bin.length / 3)); if (lineSim.bin[0] && m.userData.crop !== lineSim.bin[0].crop) { m.geometry = LP.item(lineSim.bin[0].crop, true); m.userData.crop = lineSim.bin[0].crop; } });
+  const P = lineSim.def.pressS, k = lineSim.pressT > 0 ? Math.sin(Math.PI * (1 - lineSim.pressT / P)) : 0;
+  pak.head.position.y = pak.headRest - pak.headTravel * k;
+  wsh.drum.rotation.x -= v * dt * 2.2;
+  pal.show(lineSim.boxes);
+  wsh.tanks.forEach((w) => { w.scale.y = Math.max(0.03, tank.frac()); });
+  gearSpin += v * dt * 6; cut.gears.forEach((g, i) => { g.g.rotation.z = (i ? -1 : 1) * gearSpin * (0.09 / g.r); });
+  cut.heat.forEach((h) => { h.material.emissiveIntensity = run ? 3 : 0.1; });
+  const st = lineSim.status(); [gWsh, gCut, gPak].forEach((g) => g.setState(st));
+  vend.screen.material.emissiveIntensity = grid.powered.lights ? 1.3 : 0; vend.lamp.material.emissiveIntensity = grid.powered.lights ? 2 : 0;
 }
 
 // ---------- loop ----------
@@ -733,13 +820,14 @@ function frame(dt) {
   gB.setState(grid.flows.battIn + grid.flows.battOut > 0.05 ? 'flow' : grid.soc / grid.level.batteryKwh < 0.15 ? 'waiting' : 'running');
   gG.setState(gsim.status());
   trough.water.scale.y = 1; trough.water.visible = tank.valveOpen && tank.volumeL > 10;
-  paintT -= dt; if (paintT <= 0) { paintT = 0.4; field.paint(); }
+  paintT -= dt; if (paintT <= 0) { paintT = 0.4; paintField(); }
+  animateLine(dt);
   screenT -= dt; if (screenT <= 0) { screenT = 0.5; drawScreens(); }
   clouds.forEach((c) => { c.position.x += c.userData.v * dt * (0.5 + env.wind * 0.15); if (c.position.x > 160) c.position.x = -160; });
   if (rain.visible) { const p = rainG.attributes.position, t = controls.target; for (let i = 0; i < rainN; i++) { let y = p.getY(i) - dt * 14; if (y < 0) y += 30; p.setY(i, y); } rain.position.set(t.x, 0, t.z); p.needsUpdate = true; }
   applyLighting();
 }
-window.__fw = { tr, camera, controls, wind, solar, tank, pump, drone, grid, gsim, field, props, chassis, vehicle, select, openInspect, frame, render, setTab: (t) => $('tab-' + t).click(), doAction, setHour: (h) => { hour = h; updateEnv(); }, setWind: (w) => { windBase = w; }, setWeather: (w) => { weather = w; }, setSpeed: (s) => { speed = s; }, step: (secs, sp) => { const s0 = speed; speed = sp || 1; for (let i = 0; i < secs * 30; i++) frame(1 / 30); speed = s0; }, drive, setDriving, gfx };
+window.__fw = { lineSim, fieldSim, buildFieldMeshes, tr, camera, controls, wind, solar, tank, pump, drone, grid, gsim, field, props, chassis, vehicle, select, openInspect, frame, render, setTab: (t) => $('tab-' + t).click(), doAction, setHour: (h) => { hour = h; updateEnv(); }, setWind: (w) => { windBase = w; }, setWeather: (w) => { weather = w; }, setSpeed: (s) => { speed = s; }, step: (secs, sp) => { const s0 = speed; speed = sp || 1; for (let i = 0; i < secs * 30; i++) frame(1 / 30); speed = s0; }, drive, setDriving, gfx };
 const clock = new THREE.Clock();
 function loop() {
   const dt = Math.min(clock.getDelta(), 0.05);

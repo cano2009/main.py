@@ -33,6 +33,8 @@ function hullGeometry(g) {
   h = mergeVertices(h, 1e-4); h.computeVertexNormals();
   hullCache.set(g, h); return h;
 }
+// The reference look is clean faceted shapes without ink lines; set STYLE.outline = true for the toon style.
+export const STYLE = { outline: false };
 const outlineMats = new Map();
 function outlineMaterial(th, color) {
   const k = th.toFixed(4) + color;
@@ -57,7 +59,7 @@ function outlineMaterial(th, color) {
  * Converts materials in place and adds outlines as child meshes (userData.outline = true).
  */
 export function stylize(root, o) {
-  o = Object.assign({ outline: true, outlineColor: '#15171a', minSize: 0.07, thickness: 0.022 }, o || {});
+  o = Object.assign({ outline: STYLE.outline, outlineColor: '#15171a', minSize: 0.07, thickness: 0.022 }, o || {});
   const add = [];
   root.updateMatrixWorld(true);
   root.traverse((obj) => {

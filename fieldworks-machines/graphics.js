@@ -278,7 +278,7 @@ export function createGraphics(opts) {
     const avg = acc / frames; lastMs = avg; acc = 0; frames = 0;
     if (!settings.adaptive) { if (dynScale !== 1) { dynScale = 1; resize(); } return; }
     let next = dynScale;
-    if (avg > targetMs * 1.15) next = Math.max(0.6, dynScale - 0.1);
+    if (avg > targetMs * 1.15) next = Math.max(0.85, dynScale - 0.05);
     else if (avg < targetMs * 0.8) next = Math.min(1, dynScale + 0.05);
     if (next !== dynScale) { dynScale = next; resize(); }
   }

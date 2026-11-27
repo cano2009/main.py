@@ -377,11 +377,11 @@ export const GRID_DEF = {
   ],
   exportPrice: 0.12, wearPerHour: 0.2, repairCostPerPct: 15, autoStartS: 3, autoStopS: 25
 };
-export const LOAD_ORDER = ['lights', 'charger', 'pump'];          // shed first -> last
+export const LOAD_ORDER = ['lights', 'line', 'charger', 'pump'];  // shed first -> last
 export class PowerGrid extends Unit {
   constructor() {
     super(GRID_DEF);
-    this.soc = 12; this.breakers = { pump: true, charger: true, lights: true }; this.powered = { pump: true, charger: true, lights: true };
+    this.soc = 12; this.breakers = { pump: true, charger: true, lights: true, line: true }; this.powered = { pump: true, charger: true, lights: true, line: true };
     this.mainTripped = false; this.autoDiesel = true; this.deficitT = 0; this.surplusT = 0;
     this.flows = { renew: 0, wind: 0, solar: 0, diesel: 0, battIn: 0, battOut: 0, export: 0, demand: 0, served: 0, unmet: 0 };
     this.earned = 0; this.exportedKwh = 0;
@@ -436,14 +436,14 @@ export class PowerGrid extends Unit {
   }
   panel() {
     const L = this.level, F = this.flows, socP = this.soc / L.batteryKwh;
-    const names = { pump: 'Pump jack', charger: 'Drone charger', lights: 'Yard lights' };
+    const names = { pump: 'Pump jack', charger: 'Drone charger', lights: 'Yard lights', line: 'Processing line' };
     return Object.assign(this.head(), {
       tabs: {
         overview: [['Type', this.def.type], ['Status', this.reason()], ['Generating', f1(F.renew + F.diesel) + ' kW'], ['Load', f1(F.served) + ' kW'], ['Battery', Math.round(socP * 100) + '%'], ['Sold to the utility', money(this.earned)], ['Level', lv(this)]],
         performance: [['Wind', f2(F.wind) + ' kW'], ['Solar', f2(F.solar) + ' kW'], ['Diesel', f2(F.diesel) + ' kW'], ['Battery charging', f2(F.battIn) + ' kW'], ['Battery supplying', f2(F.battOut) + ' kW'], ['Exporting', f2(F.export) + ' kW'], ['Demand', f2(F.demand) + ' kW'], ['Unmet (shed)', f2(F.unmet) + ' kW'], ['Exported in total', f2(this.exportedKwh) + ' kWh'], ['Export price', '$' + this.def.exportPrice + '/kWh']],
         resources: [['Battery', `${f1(this.soc)} of ${L.batteryKwh} kWh`], ['Battery power limit', L.batteryKw + ' kW'], ['Main breaker rating', L.panelKw + ' kW'], ...LOAD_ORDER.map((k) => [names[k], `${this.breakers[k] ? (this.powered[k] ? 'On' : 'Shed') : 'Off'} · ${f2((F.loads || {})[k] || 0)} kW`])],
         upgrades: this.upgradeTab((a, b) => [`Battery ${a.batteryKwh} -> ${b.batteryKwh} kWh`, `Battery power ${a.batteryKw} -> ${b.batteryKw} kW`, `Main breaker ${a.panelKw} -> ${b.panelKw} kW`]),
-        operation: { rows: [['State', this.reason()], ['Main breaker', this.mainTripped ? 'Tripped' : 'Closed'], ['Diesel auto-start', this.autoDiesel ? 'On' : 'Off'], ['Shed order', 'Lights, charger, pump'], ['Maintenance', this.maint()]], log: this.log.slice(0, 6) }
+        operation: { rows: [['State', this.reason()], ['Main breaker', this.mainTripped ? 'Tripped' : 'Closed'], ['Diesel auto-start', this.autoDiesel ? 'On' : 'Off'], ['Shed order', 'Lights, line, charger, pump'], ['Maintenance', this.maint()]], log: this.log.slice(0, 6) }
       },
       strip: [{ k: 'Generating', v: f1(F.renew + F.diesel) + ' kW' }, { k: 'Load', v: f1(F.served) + ' kW' }, { k: 'Battery', v: Math.round(socP * 100) + '%', f: socP, c: 'var(--ok)' }, { k: 'Diesel', v: f1(F.diesel) + ' kW' }, { k: 'Export', v: f1(F.export) + ' kW' }, { k: 'Earned', v: money(this.earned) }],
       actions: [
@@ -452,6 +452,164 @@ export class PowerGrid extends Unit {
         { id: 'main', label: 'Reset main breaker', disabled: !this.mainTripped, primary: this.mainTripped },
         ...standardActions(this).slice(2)
       ]
+    });
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+// Crop field: plants grow when the soil is wet (the drone waters it), are harvested into the line's bin, then replanted.
+export const CROPS = {
+  radish:  { name: 'Radish',  growHours: 3.5, value: 0.9, plantsPerItem: 5, density: 1 },
+  carrot:  { name: 'Carrot',  growHours: 4.5, value: 1.0, plantsPerItem: 5, density: 1 },
+  wheat:   { name: 'Wheat',   growHours: 5.5, value: 1.8, plantsPerItem: 8, density: 1 },
+  cabbage: { name: 'Cabbage', growHours: 6,   value: 3.2, plantsPerItem: 2, density: 0.5 },
+  pumpkin: { name: 'Pumpkin', growHours: 8,   value: 8.0, plantsPerItem: 1, density: 0.25 },
+  corn:    { name: 'Corn',    growHours: 7,   value: 1.6, plantsPerItem: 2, density: 0.5 }
+};
+export class FieldSim {
+  constructor(F) {
+    this.def = { id: 'field', name: 'Crop Field', short: 'Field', model: 'Field 1', brand: 'Fieldworks Farm', category: 'Agriculture', levels: [{ level: 1, cost: 0, parts: [] }] };
+    this.F = F; this.crop = 'radish'; this.time = 0; this.log = []; this.harvested = 0; this.autoHarvest = true; this.levelIndex = 0;
+    const W = F.x1 - F.x0, D = F.z1 - F.z0, rows = Math.round(D / 0.5), per = Math.floor(W / 0.36);
+    let s = 11; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+    this.plants = [];
+    for (let j = 0; j < rows; j++) for (let k = 0; k < per; k++) this.plants.push({ x: F.x0 + (k + 0.5) * W / per + (r() - 0.5) * 0.06, z: F.z0 + (j + 0.5) * D / rows + (r() - 0.5) * 0.05, row: j, col: k, g: 0.55 + r() * 0.5, wet: 0.5 + r() * 0.2, shade: r(), rot: r() * 6.28, size: 0.85 + r() * 0.35 });
+    this.applyDensity();
+  }
+  get level() { return this.def.levels[0]; }
+  note(t) { this.log.unshift({ t: this.time, text: t }); this.log.length = Math.min(this.log.length, 12); }
+  applyDensity() { const d = CROPS[this.crop].density; this.plants.forEach((p) => { p.use = d >= 1 || (d >= 0.5 ? p.col % 2 === 0 : p.col % 2 === 0 && p.row % 2 === 0); }); this.used = this.plants.filter((p) => p.use); }
+  setCrop(key) { if (!CROPS[key] || key === this.crop) return; this.crop = key; this.plants.forEach((p) => { p.g = 0; }); this.applyDensity(); this.note(`Replanted with ${CROPS[key].name.toLowerCase()}`); }
+  wetness() { let a = 0; this.plants.forEach((p) => { a += Math.min(1, p.wet); }); return a / this.plants.length; }
+  ripe() { return this.used.filter((p) => p.g >= 1).length / this.used.length; }
+  growth() { return this.used.reduce((a, p) => a + Math.min(1, p.g), 0) / this.used.length; }
+  stageOf(p) { return p.g >= 1 ? 3 : p.g >= 0.6 ? 2 : p.g >= 0.25 ? 1 : 0; }
+  status() { return this.wetness() < 0.25 ? 'waiting' : 'running'; }
+  reason() { const r = this.ripe(); if (r > 0.9) return `${CROPS[this.crop].name} ready to harvest`; if (this.wetness() < 0.25) return 'Soil too dry - growth has almost stopped'; return `${CROPS[this.crop].name} growing (${Math.round(this.growth() * 100)}%)`; }
+  tick(dt, dronePos, swath, spraying) {
+    this.time += dt;
+    const C = CROPS[this.crop], k = dt / (3 * 3600), grow = dt / (C.growHours * 3600);
+    this.plants.forEach((p) => {
+      p.wet = Math.max(0, p.wet - k);
+      if (spraying && Math.abs(p.z - dronePos.z) < swath / 2 && Math.abs(p.x - dronePos.x) < 0.5) p.wet = 1;
+      if (p.use && p.g < 1) p.g = Math.min(1, p.g + grow * (p.wet > 0.25 ? 1 : 0.08));
+    });
+  }
+  harvest() {
+    const ripe = this.used.filter((p) => p.g >= 1);
+    if (!ripe.length) return 0;
+    ripe.forEach((p) => { p.g = 0; });
+    const n = Math.max(1, Math.round(ripe.length / CROPS[this.crop].plantsPerItem));
+    this.harvested += n; this.note(`Harvested ${n} ${CROPS[this.crop].name.toLowerCase()} and replanted`);
+    return n;
+  }
+  panel() {
+    const C = CROPS[this.crop], st = [0, 0, 0, 0]; this.used.forEach((p) => st[this.stageOf(p)]++);
+    return {
+      key: 'field', title: `Crop Field · ${C.name}`, sub: 'Fieldworks Farm · Agriculture', status: this.status(), reason: this.reason(),
+      tabs: {
+        overview: [['Crop', C.name], ['Status', this.reason()], ['Growth', Math.round(this.growth() * 100) + '%'], ['Ready', Math.round(this.ripe() * 100) + '%'], ['Soil moisture', Math.round(this.wetness() * 100) + '%'], ['Harvested so far', this.harvested + ' items']],
+        performance: [['Plants', this.used.length], ['Sprouts', st[0]], ['Young', st[1]], ['Growing', st[2]], ['Ready', st[3]], ['Time to grow', C.growHours + ' h with wet soil'], ['Dry soil', 'Growth slows to 8%']],
+        resources: [['Water', 'Sprayed by the drone'], ['Value per item', '$' + C.value.toFixed(2) + ' washed and packed'], ['Plants per item', C.plantsPerItem]],
+        upgrades: { rows: [['Current level', '1 of 1'], ['Next level', 'Not in this demo']], gains: [] },
+        operation: { rows: [['Auto harvest', this.autoHarvest ? 'On (at 90% ready)' : 'Off'], ['Goes to', 'Harvest bin at the processing line']], log: this.log.slice(0, 6) }
+      },
+      strip: [{ k: 'Growth', v: Math.round(this.growth() * 100) + '%', f: this.growth(), c: 'var(--ok)' }, { k: 'Ready', v: Math.round(this.ripe() * 100) + '%', f: this.ripe() }, { k: 'Moisture', v: Math.round(this.wetness() * 100) + '%', f: this.wetness(), c: 'var(--water)' }, { k: 'Crop', v: C.name }, { k: 'Harvested', v: this.harvested }],
+      actions: [{ id: 'harvest', label: 'Harvest now', disabled: this.ripe() <= 0, primary: this.ripe() > 0.5 }, { id: 'auto', label: `Auto harvest: ${this.autoHarvest ? 'on' : 'off'}` }, ...Object.keys(CROPS).map((k) => ({ id: 'crop-' + k, label: (k === this.crop ? 'Planted: ' : 'Plant ') + CROPS[k].name.toLowerCase(), disabled: k === this.crop }))]
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Processing line: harvest bin -> belt -> washer (uses tank water) -> cutter and sorter -> packer -> pallet -> sold.
+export const LINE_DEF = {
+  id: 'line', name: 'Processing Line', short: 'Processing line', type: 'Wash, sort and pack line', brand: 'Fieldworks Processing', model: 'FW-PL3', category: 'Processing',
+  levels: [
+    { level: 1, beltSpeed: 0.35, packSize: 4, cost: 0, parts: [] },
+    { level: 2, beltSpeed: 0.5, packSize: 6, cost: 6000, parts: ['Belt motors 0.55 kW x3', 'Six-pack press head'] },
+    { level: 3, beltSpeed: 0.7, packSize: 8, cost: 12000, parts: ['Belt motors 0.75 kW x3', 'Eight-pack press head', 'Optical sorter'] }
+  ],
+  waterPerItemL: 3, pressS: 2.4, palletBoxes: 12, gap: 0.42, wearPerHour: 4, repairCostPerPct: 10,
+  zones: { wash: 4.6, cut: 8.6, pack: 12.0 }, kw: { belts: 1.1, washer: 1.1, cutter: 2.2, packer: 1.5 }
+};
+export class LineSim extends Unit {
+  constructor() {
+    super(LINE_DEF);
+    this.bin = []; this.items = []; this.packBuf = []; this.pressT = 0; this.boxes = 0; this.boxValue = []; this.sold = 0; this.earned = 0;
+    this.washed = 0; this.packed = 0; this.unwashed = 0; this.waterL = 0; this.idleT = 0; this.nextId = 1;
+  }
+  addToBin(crop, n, value) { for (let i = 0; i < n; i++) this.bin.push({ crop, value }); }
+  running() { return this.on && this.powered && !this.fault; }
+  status() { if (!this.on) return 'off'; if (!this.powered || this.fault) return 'stopped'; if (!this.items.length && !this.bin.length && !this.pressT) return 'waiting'; return 'running'; }
+  reason() {
+    if (!this.on) return 'Switched off'; if (!this.powered) return 'No power - check the yard network'; if (this.fault) return this.fault.text;
+    if (this.boxes >= this.def.palletBoxes) return 'Pallet full';
+    if (!this.items.length && !this.bin.length) return 'Waiting for the harvest';
+    return `Processing ${this.items.length + this.packBuf.length} items`;
+  }
+  powerKw() {
+    if (!this.on || this.fault) return 0.03;
+    const K = this.def.kw, busy = this.items.length > 0 || this.bin.length > 0;
+    return busy || this.pressT > 0 ? K.belts + K.washer + K.cutter + (this.pressT > 0 ? K.packer : 0.2) : 0.15;
+  }
+  // tank: StorageTank (washer water). Returns money earned this tick.
+  tick(dt, tank) {
+    this.time += dt; const D = this.def, Lv = this.level, Z = D.zones;
+    let earned = 0;
+    if (!this.running()) return 0;
+    const v = Lv.beltSpeed * this.efficiency();
+    // feed from the bin
+    if (this.bin.length && (!this.items.length || this.items[this.items.length - 1].s > D.gap + 0.05)) {
+      const b = this.bin.shift(); this.items.push({ id: this.nextId++, crop: b.crop, value: b.value, s: 0, washed: false, cut: false, z: (Math.random() - 0.5) * 0.18, rot: Math.random() * 6.28 });
+    }
+    // move: front item first, each keeps a gap behind the one ahead; the packer holds them while pressing
+    const packOpen = this.packBuf.length < Lv.packSize && this.boxes < D.palletBoxes;
+    for (let i = 0; i < this.items.length; i++) {
+      const it = this.items[i], limit = i === 0 ? (packOpen ? Z.pack + 1 : Z.pack - 0.25) : this.items[i - 1].s - D.gap;
+      it.s = Math.min(limit, it.s + v * dt);
+      if (!it.washed && it.s >= Z.wash && !it.tried) { it.tried = true; const got = tank ? tank.draw(D.waterPerItemL) : D.waterPerItemL; this.waterL += got; if (got >= D.waterPerItemL * 0.99) { it.washed = true; this.washed++; } else this.unwashed++; }
+      if (!it.cut && it.s >= Z.cut) it.cut = true;
+    }
+    while (this.items.length && this.items[0].s >= Z.pack) this.packBuf.push(this.items.shift());
+    // press
+    if (this.pressT > 0) {
+      this.pressT -= dt;
+      if (this.pressT <= 0) {
+        this.pressT = 0;
+        const val = this.packBuf.splice(0, Lv.packSize).reduce((a, it) => a + it.value * (it.washed ? 1 : 0.6) * (it.cut ? 1.25 : 1), 0);
+        this.boxes++; this.boxValue.push(val); this.packed++;
+        if (this.boxes >= D.palletBoxes) earned += this.sellPallet(true);
+      }
+    } else if (this.packBuf.length >= Lv.packSize && this.boxes < D.palletBoxes) this.pressT = D.pressS;
+    else if (this.packBuf.length && !this.items.length && !this.bin.length) { this.idleT += dt; if (this.idleT > 6) { this.pressT = D.pressS; this.idleT = 0; } }
+    this.energyKwh += this.powerKw() * dt / 3600;
+    this.wear(dt, true);
+    return earned;
+  }
+  sellPallet(auto) {
+    if (!this.boxes) return 0;
+    const v = this.boxValue.reduce((a, b) => a + b, 0) * 1.0;
+    this.note(`${auto ? 'Pallet full, sold' : 'Sold'} ${this.boxes} boxes for $${v.toFixed(0)}`);
+    this.sold += this.boxes; this.earned += v; this.boxes = 0; this.boxValue = [];
+    return v;
+  }
+  act(id, wallet) {
+    if (id === 'sell') { const v = this.sellPallet(false); return v ? { cost: -v, msg: `Pallet sold for $${v.toFixed(0)}` } : { msg: 'No boxes on the pallet yet' }; }
+    return super.act(id, wallet);
+  }
+  panel() {
+    const L = this.level, D = this.def, pal = this.boxes / D.palletBoxes;
+    return Object.assign(this.head(), {
+      tabs: {
+        overview: [['Type', D.type], ['Status', this.reason()], ['In the bin', this.bin.length + ' items'], ['On the belt', this.items.length + ' items'], ['Boxes on the pallet', `${this.boxes} of ${D.palletBoxes}`], ['Sold', `${this.sold} boxes, $${this.earned.toFixed(0)}`], ['Level', `${L.level} of ${D.levels.length}`]],
+        performance: [['Belt speed', (L.beltSpeed * this.efficiency()).toFixed(2) + ' m/s'], ['Power', this.powerKw().toFixed(2) + ' kW'], ['Washed', this.washed], ['Not washed (no water)', this.unwashed], ['Boxes packed', this.packed], ['Items per box', L.packSize], ['Water used', Math.round(this.waterL) + ' L'], ['Energy used', this.energyKwh.toFixed(2) + ' kWh'], ['Efficiency', Math.round(this.efficiency() * 100) + '%']],
+        resources: [['Water', D.waterPerItemL + ' L per item from the storage tank'], ['Power', 'Processing line circuit'], ['Washed and sorted', 'Full price, +25% for sorting'], ['Unwashed', '60% of the price']],
+        upgrades: this.upgradeTab((a, b) => [`Belt ${a.beltSpeed} -> ${b.beltSpeed} m/s`, `Box ${a.packSize} -> ${b.packSize} items`]),
+        operation: { rows: [['Current task', this.reason()], ['Press', this.pressT > 0 ? 'Packing' : 'Ready'], ['Fault', this.fault ? this.fault.text : 'None'], ['Maintenance', this.maint()], ['Service cost', money(this.repairCost())]], log: this.log.slice(0, 6) }
+      },
+      strip: [{ k: 'Bin', v: this.bin.length }, { k: 'On belt', v: this.items.length }, { k: 'Pallet', v: `${this.boxes}/${D.palletBoxes}`, f: pal }, { k: 'Power', v: this.powerKw().toFixed(1) + ' kW' }, { k: 'Sold', v: '$' + this.earned.toFixed(0) }, this.condStat()],
+      actions: [{ id: 'sell', label: `Sell pallet (${this.boxes})`, disabled: !this.boxes, primary: this.boxes > 0 }, { id: 'power', label: this.on ? 'Stop line' : 'Start line' }, ...standardActions(this).slice(1)]
     });
   }
 }

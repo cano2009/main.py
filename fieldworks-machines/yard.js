@@ -610,11 +610,11 @@ export function distributionPanel(circuits) {
   const flowScreen = screen(1.1, 0.52, 384, root, 0, 1.68, 0.265);
   const breakers = {};
   ['main', ...circuits].forEach((k, i) => {
-    const g = new THREE.Group(); g.position.set(-0.54 + i * 0.36, 0.95, 0.27); root.add(g);
-    box(0.22, 0.34, 0.06, C.black, 0, 0, 0, g);
+    const g = new THREE.Group(); g.position.set(-0.56 + i * 0.28, 0.95, 0.27); root.add(g);
+    box(0.2, 0.34, 0.06, C.black, 0, 0, 0, g);
     const handle = new THREE.Group(); g.add(handle);
     box(0.08, 0.16, 0.06, k === 'main' ? C.red : C.dark, 0, 0.08, 0.05, handle);
-    const l = label(0.26, 0.08, [k.toUpperCase()], { bg: '#f2efe4' }); l.position.set(0, -0.28, 0.035); g.add(l);
+    const l = label(0.24, 0.08, [k.toUpperCase()], { bg: '#f2efe4' }); l.position.set(0, -0.28, 0.035); g.add(l);
     breakers[k] = { g, handle, led: new V(0, 0.24, 0.04) };
   });
   bake(root, Object.values(breakers).map((b) => b.handle));
