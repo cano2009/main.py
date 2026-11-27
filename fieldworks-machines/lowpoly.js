@@ -182,7 +182,8 @@ export function cropMaterials(F, onBeforeCompile) {
 // Low-poly nature props
 const lin = (h) => new THREE.Color(h).convertSRGBToLinear();
 function flatMat(c, rough) { const m = new THREE.MeshStandardMaterial({ color: lin(c), roughness: rough || 0.85, flatShading: true }); m.userData.lowpoly = true; m.userData.faceted = true; return m; }
-const NATURE = { trunk: flatMat('#7a5a3c'), birch: flatMat('#e8e4da'), leafA: flatMat('#7cc24a'), leafB: flatMat('#5ea83c'), leafC: flatMat('#e08a2e'), rock: flatMat('#8d949a'), apple: flatMat('#d23a2c', 0.5) };
+function softMat(c, rough) { const m = new THREE.MeshStandardMaterial({ color: lin(c), roughness: rough || 0.8 }); m.userData.lowpoly = true; return m; }
+const NATURE = { trunk: softMat('#6f5136'), birch: softMat('#e8e4da'), leafA: softMat('#6fb544'), leafB: softMat('#549b37'), leafC: softMat('#d9822c'), rock: flatMat('#8d949a'), apple: flatMat('#d23a2c', 0.5) };
 function jitter(geo, amt, seed) {
   let s = seed || 1; const r = () => (s = (s * 16807) % 2147483647) / 2147483647 - 0.5;
   const p = geo.attributes.position, map = new Map();
@@ -196,12 +197,14 @@ function jitter(geo, amt, seed) {
 export function tree(kind, seed) {
   const g = new THREE.Group(); let s = seed || 3; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
   const birch = kind === 'birch', h = 2.2 + r() * 1.6;
-  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.16, h, 6), birch ? NATURE.birch : NATURE.trunk); trunk.position.y = h / 2; g.add(trunk);
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.17, h, 10), birch ? NATURE.birch : NATURE.trunk); trunk.position.y = h / 2; g.add(trunk);
+  for (let k = 0; k < 3; k++) { const rt = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.5, 6), birch ? NATURE.birch : NATURE.trunk); const a = k * 2.1 + r(); rt.position.set(Math.cos(a) * 0.14, 0.12, Math.sin(a) * 0.14); rt.rotation.set(Math.sin(a) * 0.9, 0, -Math.cos(a) * 0.9); g.add(rt); }   // root flare
   const leaf = kind === 'autumn' ? NATURE.leafC : r() < 0.5 ? NATURE.leafA : NATURE.leafB;
   const n = birch ? 4 : 3 + Math.floor(r() * 3);
   for (let i = 0; i < n; i++) {
     const rad = (birch ? 0.55 : 0.8) + r() * 0.5;
-    const c = new THREE.Mesh(jitter(new THREE.IcosahedronGeometry(rad, 1), rad * 0.18, i + seed * 7), leaf);
+    const lg = mergeVertices(jitter(new THREE.IcosahedronGeometry(rad, 2), rad * 0.1, i + seed * 7).deleteAttribute('normal').deleteAttribute('uv')); lg.computeVertexNormals();
+    const c = new THREE.Mesh(lg, i % 2 && leaf !== NATURE.leafC ? (leaf === NATURE.leafA ? NATURE.leafB : NATURE.leafA) : leaf);   // rounder, two-tone foliage clumps
     c.position.set((r() - 0.5) * 1.1, h + (r() - 0.2) * 0.9, (r() - 0.5) * 1.1); c.scale.y = 0.85 + r() * 0.3; g.add(c);
     if (kind === 'apple') for (let k = 0; k < 6; k++) { const a = new THREE.Mesh(new THREE.IcosahedronGeometry(0.09, 0), NATURE.apple); const d = new THREE.Vector3(r() - 0.5, r() - 0.3, r() - 0.5).normalize().multiplyScalar(rad * 0.98); a.position.copy(c.position).add(d); g.add(a); }
     if (birch && i < 3) { const b = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.05, 1.0, 5), NATURE.birch); b.position.set(c.position.x * 0.5, h - 0.3, c.position.z * 0.5); b.lookAt(c.position); b.rotateX(Math.PI / 2); g.add(b); }

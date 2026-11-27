@@ -95,7 +95,7 @@ const EdgeShader = {
       vec3 n = nr(uv);
       float dn = 4.0 - dot(n, nr(uv - vec2(px.x, 0.0))) - dot(n, nr(uv + vec2(px.x, 0.0))) - dot(n, nr(uv - vec2(0.0, px.y))) - dot(n, nr(uv + vec2(0.0, px.y)));
       float e = max(smoothstep(0.035, 0.1, dz), smoothstep(0.6, 1.4, dn) * 0.3);   // silhouettes full, creases faint (thin ribs would dash)
-      e *= strength * (1.0 - smoothstep(22.0, 75.0, z)) * step(z, cameraFar * 0.9);
+      e *= strength * (1.0 - smoothstep(14.0, 40.0, z)) * step(z, cameraFar * 0.9);   // only near the camera: far lattices turn to noise
       gl_FragColor = vec4(mix(c.rgb, c.rgb * ink, e), c.a);
     }`
 };
@@ -158,8 +158,10 @@ export function createGraphics(opts) {
   const targetMs = 1000 / (opts.targetFps || 60);
 
   const stored = readStore(storageKey);
-  let presetName = stored && stored.preset && PRESET_NAMES.includes(stored.preset) ? stored.preset : 'high';
+  const coarse = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;   // phones and tablets start lighter
+  let presetName = stored && stored.preset && PRESET_NAMES.includes(stored.preset) ? stored.preset : coarse ? 'medium' : 'high';
   const settings = Object.assign({}, PRESETS.high, presetName !== 'custom' ? PRESETS[presetName] : {}, stored && stored.preset === 'custom' ? stored.settings : {});
+  if (coarse && !stored) Object.assign(settings, { renderScale: 0.75, shadows: 'low' });   // phones: three quarters resolution, lighter shadows
 
   // The composer does the tone mapping and sRGB conversion now.
   renderer.toneMapping = THREE.NoToneMapping;
