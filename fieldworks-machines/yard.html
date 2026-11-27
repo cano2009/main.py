@@ -1334,6 +1334,10 @@ for (let i = 0; i < 8; i++) { const m = new THREE.Mesh(itemGeo('radish', true), 
 let gearSpin = 0;
 // Blender models: the Hydro-Wash Station replaces the drum washer's visible meshes (ports, glow and picking stay)
 let washParts = null;
+// power row (Blender, one model at a time as each is finished): each keeps the old model's group, wires, screens, labels and status lights
+const under = (m, groups) => { for (let p = m; p; p = p.parent) if (groups.includes(p)) return true; return false; };
+const sockOf = (m) => { for (let p = m; p; p = p.parent) if (Math.abs(p.position.x - 4.6) < 0.01 && Math.abs(p.position.z - 3.4) < 0.01) return true; return false; };
+MD.swap(tw.root, 'models/wind_turbine.glb', { attach: { yaw: tw.yaw, rotor: tw.rotor }, keep: sockOf });
 MD.swap(wsh.root, 'models/hydrowash.glb').then((r) => { if (r) { washParts = r.parts; envMats = null; } });
 function animateLine(dt) {
   const run = lineSim.running(), v = run ? lineSim.level.beltSpeed * lineSim.efficiency() * speed : 0;

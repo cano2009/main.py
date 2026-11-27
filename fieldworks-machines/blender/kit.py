@@ -194,3 +194,54 @@ def ring(r, tube, loc, m, axis='X', name='ring', segs=24, arc=None):
     o = bpy.context.object; o.name = name; o.data.materials.append(mat(m) if isinstance(m, str) else m)
     for p in o.data.polygons: p.use_smooth = True
     return o
+
+def lathe(profile, loc, m, axis='Z', segs=32, name='lathe', smooth=True):
+    """Revolve a profile [(radius, height), ...] around an axis through loc. Ends close with caps.
+    axis: 'Z' (up), 'Y' or '-Y' (along y), 'X' or '-X'."""
+    bm = bmesh.new(); rings = []
+    for r, h in profile:
+        if r < 1e-4: rings.append([bm.verts.new((0, 0, h))]); continue
+        rings.append([bm.verts.new((math.cos(k / segs * math.tau) * r, math.sin(k / segs * math.tau) * r, h)) for k in range(segs)])
+    for a, b in zip(rings, rings[1:]):
+        if len(a) == 1 and len(b) == 1: continue
+        if len(a) == 1:
+            for k in range(segs): bm.faces.new((a[0], b[k], b[(k + 1) % segs]))
+        elif len(b) == 1:
+            for k in range(segs): bm.faces.new((a[k], b[0], a[(k + 1) % segs]))
+        else:
+            for k in range(segs): bm.faces.new((a[k], a[(k + 1) % segs], b[(k + 1) % segs], b[k]))
+    if len(rings[0]) > 1: bm.faces.new(list(reversed(rings[0])))
+    if len(rings[-1]) > 1: bm.faces.new(rings[-1])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    me = bpy.data.meshes.new(name); bm.to_mesh(me); bm.free()
+    o = bpy.data.objects.new(name, me); bpy.context.collection.objects.link(o)
+    o.location = loc
+    o.rotation_euler = {'Z': (0, 0, 0), '-Z': (math.pi, 0, 0), 'Y': (-math.pi / 2, 0, 0), '-Y': (math.pi / 2, 0, 0), 'X': (0, math.pi / 2, 0), '-X': (0, -math.pi / 2, 0)}[axis]
+    o.data.materials.append(mat(m) if isinstance(m, str) else m)
+    if smooth:
+        for p in o.data.polygons: p.use_smooth = True
+        o.data.use_auto_smooth = True; o.data.auto_smooth_angle = math.radians(48)
+    return o
+
+def loft(sections, m, n=6, name='loft', smooth=True):
+    """A body lofted through rounded-rectangle sections along y: [(y, width, height, zc, round), ...].
+    round is the corner radius as a fraction of the smaller side (0.5 = fully rounded). Ends are capped."""
+    bm = bmesh.new(); rings = []
+    for y, w, h, zc, rnd in sections:
+        r = min(w, h) * rnd; pts = []
+        for cx, cz, a0 in ((w / 2 - r, h / 2 - r, 0), (-w / 2 + r, h / 2 - r, math.pi / 2), (-w / 2 + r, -h / 2 + r, math.pi), (w / 2 - r, -h / 2 + r, 1.5 * math.pi)):
+            for k in range(n + 1):
+                a = a0 + k / n * math.pi / 2; pts.append((cx + math.cos(a) * r, cz + math.sin(a) * r))
+        rings.append([bm.verts.new((x, y, zc + z)) for x, z in pts])
+    N = len(rings[0])
+    for a, b in zip(rings, rings[1:]):
+        for k in range(N): bm.faces.new((a[k], a[(k + 1) % N], b[(k + 1) % N], b[k]))
+    bm.faces.new(list(reversed(rings[0]))); bm.faces.new(rings[-1])
+    bmesh.ops.recalc_face_normals(bm, faces=bm.faces)
+    me = bpy.data.meshes.new(name); bm.to_mesh(me); bm.free()
+    o = bpy.data.objects.new(name, me); bpy.context.collection.objects.link(o)
+    o.data.materials.append(mat(m) if isinstance(m, str) else m)
+    if smooth:
+        for p in o.data.polygons: p.use_smooth = True
+        o.data.use_auto_smooth = True; o.data.auto_smooth_angle = math.radians(40)
+    return o

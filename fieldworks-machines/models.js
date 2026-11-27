@@ -8,6 +8,8 @@ import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
 const loader = new GLTFLoader(), cache = new Map();
 // status lights added by glow.js are emissive and drawn on top: they stay (the caller may move them)
 const isGlow = (m) => m.material && m.material.emissive && m.material.emissiveIntensity > 0 && !m.material.map && (m.material.emissive.r + m.material.emissive.g + m.material.emissive.b) > 0.05;
+// screens and printed labels are canvas textures with live content: they stay, and the Blender models leave room for them
+const isCanvas = (m) => m.material && ((m.material.map && m.material.map.isCanvasTexture) || (m.material.emissiveMap && m.material.emissiveMap.isCanvasTexture));
 export function loadModel(url) {
   // the web demo can only serve scripts, so each .glb also ships as a .glb.js module holding it as base64
   const viaJs = (u) => import('./' + u + '.js').then((m) => { const b = atob(m.default), a = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return new Promise((ok, bad) => loader.parse(a.buffer, '', (g) => ok(g.scene), bad)); });
@@ -15,11 +17,11 @@ export function loadModel(url) {
   return cache.get(url).then((s) => s.clone(true));
 }
 /** swap(host, url, o): hide host's own meshes (but not its port sockets or glow lights), add the model inside it.
- *  o.keep(mesh) -> true keeps an old mesh visible. Resolves to { scene, parts: { name: Object3D } }. */
+ *  o.keep(mesh) -> true keeps an old mesh visible. o.attach: { nodeName: group } moves a node into a game group. Resolves to { scene, parts: { name: Object3D } }. */
 export function swap(host, url, o) {
   o = o || {};
   return loadModel(url).then((scene) => {
-    host.traverse((m) => { if (m.isMesh && !m.userData.socketPart && !isGlow(m) && !(o.keep && o.keep(m))) m.visible = false; });
+    host.traverse((m) => { if (m.isMesh && !m.userData.socketPart && !isGlow(m) && !isCanvas(m) && !(o.keep && o.keep(m))) m.visible = false; });
     const parts = {};
     scene.traverse((m) => {
       if (m.name) parts[m.name] = m;
@@ -29,6 +31,8 @@ export function swap(host, url, o) {
     });
     scene.userData.fromBlender = url;
     host.add(scene);
+    // moving parts: a named node goes into the game's own animated group, at that group's pivot
+    Object.entries(o.attach || {}).forEach(([name, group]) => { const n = scene.getObjectByName(name); if (!n || !group) return; group.add(n); n.position.set(0, 0, 0); n.quaternion.identity(); });
     return { scene, parts };
   }).catch((e) => { console.warn('Model not loaded, keeping the built-in one:', url, e && e.message); return null; });
 }
