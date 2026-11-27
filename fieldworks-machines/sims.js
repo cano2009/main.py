@@ -583,8 +583,8 @@ export class TractorSim extends Unit {
     if (this.state !== 'parked') return false;
     const L = this.L, imp = { plow: 'plow', seed: 'seeder', harvest: 'harvester' }[job], F = field.F, R = [];
     const slot = L.slots[imp];
-    if (this.implement && this.implement !== imp) { const s0 = L.slots[this.implement]; R.push({ x: s0.x + 4.2, z: s0.z, face: Math.PI / 2, label: `Returning the ${this.implement}` }, { x: s0.x + L.hitchBack, z: s0.z, reverse: true, label: `Parking the ${this.implement}` }, { detach: true }); }
-    if (this.implement !== imp) { R.push({ x: slot.x + 4.2, z: slot.z, face: Math.PI / 2, label: `Going to the ${imp}` }, { x: slot.x + L.hitchBack, z: slot.z, reverse: true, label: `Backing up to the ${imp}` }, { attach: imp }); }
+    if (this.implement && this.implement !== imp) { const s0 = L.slots[this.implement]; R.push({ x: s0.x + 3.6, z: s0.z, face: Math.PI / 2, label: `Returning the ${this.implement}` }, { x: s0.x + L.hitchBack, z: s0.z, reverse: true, label: `Parking the ${this.implement}` }, { detach: true }); }
+    if (this.implement !== imp) { R.push({ x: slot.x + 3.6, z: slot.z, face: Math.PI / 2, label: `Going to the ${imp}` }, { x: slot.x + L.hitchBack, z: slot.z, reverse: true, label: `Backing up to the ${imp}` }, { attach: imp }); }
     R.push({ x: L.gate.x + 1.2, z: L.gate.z, label: 'Entering the field' });
     const lanes = Math.round((F.z1 - F.z0) / TRACTOR_DEF.width);
     for (let i = 0; i < lanes; i++) {
@@ -593,7 +593,7 @@ export class TractorSim extends Unit {
     }
     R.push({ x: F.x0 + 0.6, z: L.gate.z, label: 'Leaving the field' }, { x: L.gate.x - 1.0, z: L.gate.z, label: 'Leaving the field' });
     if (job === 'harvest') R.push({ x: L.unload.x, z: L.unload.z, label: 'Driving to the hopper' }, { unload: true, label: 'Unloading into the hopper' });
-    R.push({ x: slot.x + 4.2, z: slot.z, face: Math.PI / 2, label: `Returning the ${imp}` }, { x: slot.x + L.hitchBack, z: slot.z, reverse: true, label: `Parking the ${imp}` }, { detach: true }, { x: slot.x + 4.6, z: slot.z, label: 'Parking' }, { park: true });
+    R.push({ x: slot.x + 3.6, z: slot.z, face: Math.PI / 2, label: `Returning the ${imp}` }, { x: slot.x + L.hitchBack, z: slot.z, reverse: true, label: `Parking the ${imp}` }, { detach: true }, { x: slot.x + 3.9, z: slot.z, label: "Parking" }, { park: true });
     this.route = R; this.job = job; this.state = 'driving'; this.worked = 0; this.note(`Job started: ${job}`);
     return true;
   }

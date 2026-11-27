@@ -18,6 +18,17 @@ Before integrating, step 1 of the prompt still has to happen: inspect the real p
 | 2. Art direction | Low-poly flat shading with bold ink outlines that stay solid at any distance, a consistent palette, and sharp full-resolution rendering. | `lowpoly.js`, `graphics.js` |
 | 6, 8. Crops and processing | Six crops with four growth stages, watering, harvest, and a washer, sorter, packer and pallet that sell. | `lpcrops.js`, `line.js`, `sims.js` |
 
+## Stage 1b (done here): everything that does not need the PC
+
+| Prompt section | What exists now |
+|---|---|
+| 6. Crops | 14 crops with the full 7-stage cycle (seed to harvested), plus harvested items. Soil states for plowing and sowing. |
+| 7. Machinery | Tractor with plow, seeder and harvester. Implements couple through hitch ports, and the tractor really plows, sows and harvests. |
+| 8. Production chain | Wheat to flour to bread to crates, and corn to cornmeal, fed by the sorter and sold as pallets. |
+| 12. Buildings | Barn, warehouse and greenhouse: complete models with snapping placement, rotation, blocked-placement reasons, colliders and removal. |
+| 20. Saving | Autosave with a backup copy and validation on load. |
+| 3, 16. Validation | Every new model passes the validator (0 errors, 0 warnings). It found and fixed a floating tractor front axle, harvester wheels with no axle, oven walls 27 cm above their base, and an unmounted mill motor. |
+
 ## Stage 2: needs the real project (PC connected)
 1. Inspect the real game: engine, chunk terrain, save format, building system, vehicles, existing assets.
 2. Run the validator on every real model (it works on any three.js object tree) and fix what it finds.
@@ -25,9 +36,7 @@ Before integrating, step 1 of the prompt still has to happen: inspect the real p
 4. Save and load the connection graph with the world (section 20).
 
 ## Later stages (not started)
-- Crops: rice, cotton, sunflowers, soybeans, berries, potatoes, tomatoes and lettuce in the new style, and a seed-to-harvested 7-stage cycle (section 6).
-- Machinery: tractor and implements with hitches as ports (sections 7 and 11).
-- Production chains: wheat to flour to bread, and the others (section 8).
-- Buildings with snapping foundations (section 12).
+- More production chains: wood to furniture, ore to parts, milk to cheese (section 8). These need animals, a forest and mining first.
+- Trailers, and a player-driven tractor using the truck's suspension (sections 7 and 11).
 - Biomes, rivers, towns and roads in the infinite world (section 13).
 - Multiplayer authority, anti-cheat, moderation and the staff application system: these need the game's server design first (sections 18 and 19).

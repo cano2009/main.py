@@ -80,7 +80,7 @@ export function tractor() {
   // wheels (spin; front pair steer)
   const rear = [-1, 1].map((s) => { const w = wheel(0.78, 0.46, 16); w.position.set(s * 0.86, 0.78, -0.9); root.add(w); return w; });
   const frontPivot = [-1, 1].map((s) => { const p = new THREE.Group(); p.position.set(s * 0.78, 0.45, 1.3); root.add(p); const w = wheel(0.45, 0.3, 12); p.add(w); return { p, w }; });
-  box(1.4, 0.1, 0.12, T.dark, 0, 0.45, 1.3, root);
+  box(1.4, 0.1, 0.12, T.dark, 0, 0.45, 1.3, root); box(0.26, 0.22, 0.3, T.dark, 0, 0.56, 1.3, root);   // front axle and its pivot block on the frame
   bake(body, [beacon, ...heads]);
   return { root, body, rear, front: frontPivot, heads, beacon, hitch: { pos: new V(0, HY, HZ), dir: new V(0, 0, -1) } };
 }
@@ -127,7 +127,7 @@ export function seeder() {
   // fold-up row markers
   [-1, 1].forEach((s) => { strut(root, new V(s * 1.05, 0.12, -0.62), new V(s * 1.5, 0.7, -0.62), 0.05, T.yellow); cylX(0.12, 0.03, 8, T.steel, s * 1.52, 0.72, -0.62, root); });
   bake(root, []);
-  return { root, wheels: units, liftDown: 0.0, liftUp: 0.25 };
+  return { root, wheels: [], units, liftDown: 0.0, liftUp: 0.25 };
 }
 export function harvester() {
   const root = new THREE.Group(); root.name = 'Harvester'; root.userData.pick = 'tractor';
@@ -135,6 +135,7 @@ export function harvester() {
   strut(root, new V(0, 0, -0.03), new V(0.0, 0.35, -1.0), 0.1, T.dark);
   box(0.9, 0.08, 0.08, T.dark, 0, 0, -0.03, root); box(0.08, 0.5, 0.08, T.dark, 0, 0.25, -0.03, root);
   box(1.4, 0.12, 2.0, T.dark, 0.0, 0.35, -1.9, root);
+  box(2.0, 0.1, 0.1, T.dark, 0, 0.05, -2.1, root); box(0.3, 0.3, 0.1, T.dark, 0, 0.2, -2.1, root);   // axle under the chassis
   const wheels = [-1, 1].map((s) => { const w = wheel(0.5, 0.3, 12); w.position.set(s * 0.95, 0.05, -2.1); root.add(w); return w; });
   // pickup header with a turning reel, offset to the right so it runs beside the tractor track
   const head = new THREE.Group(); head.position.set(0, -0.25, -1.0); root.add(head);

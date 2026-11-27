@@ -33,6 +33,7 @@ export function mill() {
   cyl(0.05, 0.4, 6, F.steel, 0, 1.35, 0, root);
   // drive: motor and belt guard on the back
   cylX(0.16, 0.4, 10, F.green, 0, 0.45, -0.75, root); box(0.3, 0.3, 0.2, F.greenD, 0.3, 0.45, -0.75, root);
+  box(0.7, 0.14, 0.3, F.steelD, 0.1, 0.24, -0.68, root);   // motor mount bolted to the housing
   // flour spout to the belt (+x side)
   const sp = box(0.5, 0.08, 0.22, F.steel, 0.72, 0.72, 0, root); sp.rotation.z = -0.35;
   bake(root, [runner]);
@@ -42,8 +43,8 @@ export function mill() {
 export function oven(len) {
   len = len || 1.7;
   const root = new THREE.Group(); root.name = 'Tunnel oven'; root.userData.pick = 'chain';
-  box(len, 0.55, 1.2, F.brick, 0, 0.28, 0, root);
-  [-1, 1].forEach((s) => box(len, 0.6, 0.25, F.brick, 0, 1.12, s * 0.48, root));
+  box(len, 0.78, 1.2, F.brick, 0, 0.39, 0, root);
+  [-1, 1].forEach((s) => box(len, 0.66, 0.25, F.brick, 0, 1.1, s * 0.48, root));
   box(len + 0.1, 0.25, 1.24, F.brick, 0, 1.55, 0, root);
   box(len + 0.16, 0.08, 1.3, F.dark, 0, 1.71, 0, root);
   const glowMat = new THREE.MeshStandardMaterial({ color: 0x220a04, emissive: lin('#ff6a1a'), emissiveIntensity: 0.3 }); glowMat.userData.lowpoly = true;

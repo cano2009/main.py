@@ -43,6 +43,19 @@ Harvested items come from `lpcrops.js` `item(crop, dirty)`: each one turns from 
 - No ink outlines by default (`STYLE.outline` in `lowpoly.js`); clean faceted shapes with matte colours.
 - The page renders at the screen's full resolution (up to 2x). Automatic downscaling stays off on computers, and on phones it never goes below 85%.
 
+## Farming cycle, bakery chain, buildings and saving
+
+| Part | What it does | Files |
+|---|---|---|
+| 14 crops, 7 stages | Radish, carrot, potato, tomato, lettuce, cabbage, wheat, rice, corn, cotton, sunflower, soybean, strawberry and pumpkin. Each goes seed, sprout, young, growing, mature, ready, harvested (stubble). Plowed soil shows as clods. | `lpcrops.js` `stages()`, `item()`, `tilledGeo()` |
+| Field | Soil states: growing, harvested stubble, plowed. The crop in the ground stays until the field is sown again; the crop picker sets the next sowing. | `sims.js` `FieldSim` |
+| Tractor FW-T120 | Backs onto an implement until the hitch ports line up, couples it through the connection system, drives the field lane by lane, then parks the implement. Plow (stubble to plowed), seeder (plowed to sown) and harvester (ripe to stubble, collected in a bin and tipped into the line hopper). Auto farming runs the whole cycle. Uses diesel, wears, can be upgraded. | `farm.js`, `sims.js` `TractorSim` |
+| Bakery chain | The optical sorter diverts wheat and corn onto a grain conveyor. The stone mill turns 2 sheaves into a sack of flour (corn makes cornmeal), the tunnel oven bakes flour into bread, the bagger packs 4 per crate, and a full pallet of 12 crates is sold. Runs on the line circuit. | `food.js`, `sims.js` `ChainSim` |
+| Buildings | Barn, warehouse and greenhouse with slabs, closed walls, full roofs and doors. Place them with a ghost preview that snaps to a 0.5 m grid, turns 90° with R, and shows red with the reason when blocked (field, line, slots, other objects, yard edge). They get colliders and can be removed for half the price. | `buildings.js` |
+| Saving | Autosaves every 30 s and when the page is hidden. The previous save is kept as a backup and used if the main one fails to read. Saved: money, time, all upgrade levels and conditions, tank, battery, generator fuel, every plant, the line and chain totals, tractor fuel and buildings. "New farm" clears it. | `yard.html` |
+
+The validator (`yard.html?audit=1`) covers all of these models: 0 errors, 0 warnings, 61 connections.
+
 ## The low-poly style (`lowpoly.js`)
 
 - `stylize(root)`: flat-shaded materials, photo maps removed, canvas screens and labels kept, and outlines made from inverted hulls with smoothed normals. Outlines stay at least about 1.3 px wide at any distance.
