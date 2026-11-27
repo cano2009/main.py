@@ -59,7 +59,8 @@ export function swap(host, url, o) {
     scene.userData.fromBlender = url;
     host.add(scene);
     // moving parts: a named node goes into the game's own animated group, at that group's pivot
-    Object.entries(o.attach || {}).forEach(([name, group]) => { const n = scene.getObjectByName(name); if (!n || !group) return; group.add(n); n.position.set(0, 0, 0); n.quaternion.identity(); });
+    const found = Object.entries(o.attach || {}).map(([name, group]) => [scene.getObjectByName(name), group]);   // find all first: a node can sit inside another one being moved
+    found.forEach(([n, group]) => { if (!n || !group) return; group.add(n); n.position.set(0, 0, 0); n.quaternion.identity(); });
     return { scene, parts };
   }).catch((e) => { console.warn('Model not loaded, keeping the built-in one:', url, e && e.message); return null; });
 }
