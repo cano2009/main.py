@@ -177,7 +177,7 @@ export function pulley(r, width, M, o) {
   bolts.circle(new V(0, 0, width * 0.58), new V(0, 0, 1), r * 0.22, 6, r * 0.04);
   bolts.circle(new V(0, 0, width * 0.18), new V(0, 0, 1), r * 0.58, 8, r * 0.05);
   bolts.build(g);
-  rim.userData.isRim = true;
+  rim.userData.isRim = true; rim.userData.open = true;   // inner edge sits inside the hub
   return g;
 }
 // Open belt around two pulleys in the XY plane (pulleys centred at a and b, radii ra and rb), width along Z.
@@ -376,7 +376,7 @@ export function emergencyStop(r, M) {
   const plate = mesh(new THREE.CylinderGeometry(r * 2.2, r * 2.2, r * 0.15, 28).rotateX(Math.PI / 2), M.yellow, 0, 0, r * 0.08, g); void plate;
   mesh(new THREE.CylinderGeometry(r * 0.7, r * 0.8, r * 0.8, 20).rotateX(Math.PI / 2), M.plastic, 0, 0, r * 0.55, g);
   const head = mesh(new THREE.SphereGeometry(r * 1.25, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2).rotateX(Math.PI / 2), M.red, 0, 0, r * 0.95, g);
-  head.scale.set(1, 1, 0.55);
+  head.scale.set(1, 1, 0.55); head.userData.open = true;   // dome rim sits on the collar below
   mesh(new THREE.CylinderGeometry(r * 1.25, r * 1.25, r * 0.25, 24).rotateX(Math.PI / 2), M.red, 0, 0, r * 1.0, g);
   return g;
 }

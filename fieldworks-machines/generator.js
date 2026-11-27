@@ -171,7 +171,7 @@ export function buildGenerator(M) {
   eng.add(P.pipe([[EX - 0.31, 0.9, 0.3], [EX - 0.44, 0.9, 0.3], [EX - 0.44, 1.08, 0.3]], 0.035, M.rubber, M, { flanges: false, bend: 0.06 }));
   const filt = new THREE.Group(); filt.position.set(EX - 0.44, 1.08, 0.3); eng.add(filt);
   P.mesh(new THREE.CylinderGeometry(0.09, 0.09, 0.2, 24), M.motor, 0, 0.1, 0, filt);
-  P.mesh(new THREE.SphereGeometry(0.09, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2), M.motor, 0, 0.2, 0, filt);
+  P.mesh(new THREE.SphereGeometry(0.09, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2), M.motor, 0, 0.2, 0, filt).userData.open = true;   // dome on the filter body
   [0.04, 0.16].forEach((y) => P.mesh(new THREE.TorusGeometry(0.092, 0.006, 6, 24).rotateX(Math.PI / 2), M.steel, 0, y, 0, filt));
   // exhaust: four chrome headers into a collector, up to the muffler and the stack with a rain cap
   for (let i = 0; i < 4; i++) {

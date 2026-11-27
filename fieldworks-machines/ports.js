@@ -12,7 +12,8 @@ export const PORT_TYPES = {
   fuel:     { label: 'Fuel line',        color: '#e0702a', maxGap: 0.05 },
   conveyor: { label: 'Conveyor',         color: '#9bd04a', maxGap: 0.15, align: 25 },
   wire:     { label: 'Overhead line',    color: '#d0d0d0', maxGap: 0.05 },
-  signal:   { label: 'Automation signal', color: '#c58cff', maxGap: 0.05 }
+  signal:   { label: 'Automation signal', color: '#c58cff', maxGap: 0.05 },
+  hitch:    { label: 'Three-point hitch', color: '#e9b830', maxGap: 0.05, align: 10 }
 };
 
 /**
@@ -76,7 +77,8 @@ export function createNetwork() {
       }
       links.push(L); return L;
     },
-    connected(p) { return p.links.length > 0; }
+    connected(p) { return p.links.length > 0; },
+    unlink(L) { [L.a, L.b].forEach((p) => { const i = p.links.indexOf(L); if (i >= 0) p.links.splice(i, 1); }); const i = links.indexOf(L); if (i >= 0) links.splice(i, 1); }
   };
 }
 /** Ground-run route between two sockets: out of each socket along its facing, down to the ground, across. */
