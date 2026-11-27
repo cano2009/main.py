@@ -1,0 +1,155 @@
+# Fieldworks Blender kit: helpers that build stylised low-poly models the way the reference art is made —
+# chunky blocks with real bevels, octagonal bolts, rounded pipes with proper bends, gears, ribbed frames —
+# in the Fieldworks palette. Every model script imports this, builds into one collection and calls export().
+# Run: blender -b --python <model>.py -- <out.glb> [preview.png]
+import bpy, bmesh, math, sys, os
+from mathutils import Vector, Matrix
+
+PALETTE = {
+    'green': '#3f8a4f', 'greenD': '#2c6239', 'yellow': '#f0bd2f', 'yellowD': '#c9961c', 'steel': '#b4bcc2',
+    'steelD': '#7d868d', 'dark': '#3b4045', 'belt': '#2f3336', 'beltLine': '#8d9499', 'cream': '#ece6d6',
+    'red': '#d24a35', 'blue': '#3f86c6', 'water': '#3fc3e0', 'black': '#1e2124', 'orange': '#ea7a2c', 'rubber': '#26292c',
+}
+
+def srgb(h):
+    h = h.lstrip('#'); c = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    return [x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4 for x in c] + [1]
+
+_mats = {}
+def mat(name, rough=0.6, metal=0.0, emit=0.0):
+    key = (name, rough, metal, emit)
+    if key in _mats: return _mats[key]
+    m = bpy.data.materials.new(name + ('_e' if emit else ''))
+    m.use_nodes = True
+    b = m.node_tree.nodes['Principled BSDF']
+    col = srgb(PALETTE.get(name, name))
+    b.inputs['Base Color'].default_value = col
+    b.inputs['Roughness'].default_value = rough
+    b.inputs['Metallic'].default_value = metal
+    if emit:
+        b.inputs['Emission Color'].default_value = col
+        b.inputs['Emission Strength'].default_value = emit
+    _mats[key] = m
+    return m
+
+def reset():
+    bpy.ops.wm.read_factory_settings(use_empty=True)
+    _mats.clear()
+
+def _finish(o, m, bevel, segs=2, smooth=False):
+    if m: o.data.materials.append(m if not isinstance(m, str) else mat(m))
+    if bevel:
+        b = o.modifiers.new('bevel', 'BEVEL'); b.width = bevel; b.segments = segs; b.limit_method = 'ANGLE'; b.angle_limit = math.radians(40)
+        b.harden_normals = True
+        o.data.use_auto_smooth = True; o.data.auto_smooth_angle = math.radians(35)
+    if smooth:
+        for p in o.data.polygons: p.use_smooth = True
+        o.data.use_auto_smooth = True; o.data.auto_smooth_angle = math.radians(50)
+    return o
+
+def block(size, loc, m, bevel=0.02, rot=(0, 0, 0), name='block', segs=2):
+    """Box of size (x, y, z) centred at loc (Blender is z-up; the exporter converts to y-up)."""
+    bpy.ops.mesh.primitive_cube_add(size=1, location=loc, rotation=rot)
+    o = bpy.context.object; o.name = name; o.scale = size
+    bpy.ops.object.transform_apply(scale=True)
+    return _finish(o, m, min(bevel, min(size) * 0.45), segs)
+
+def cyl(r, depth, loc, m, axis='Z', verts=12, bevel=0.01, name='cyl', r2=None, rot=None):
+    rr = {'X': (0, math.pi / 2, 0), 'Y': (math.pi / 2, 0, 0), 'Z': (0, 0, 0)}[axis] if rot is None else rot
+    if r2 is None:
+        bpy.ops.mesh.primitive_cylinder_add(vertices=verts, radius=r, depth=depth, location=loc, rotation=rr)
+    else:
+        bpy.ops.mesh.primitive_cone_add(vertices=verts, radius1=r, radius2=r2, depth=depth, location=loc, rotation=rr)
+    o = bpy.context.object; o.name = name
+    _finish(o, m, min(bevel, r * 0.4, depth * 0.4) if bevel else 0, 2)
+    for p in o.data.polygons:
+        if abs(p.normal.dot(Vector((0, 0, 1)))) < 0.5: p.use_smooth = True   # round sides, flat caps
+    return o
+
+def bolt(loc, normal='Y', r=0.03, h=0.02, m='steel'):
+    """Octagonal bolt head standing out of a face whose normal is ±X/±Y/±Z."""
+    ax = normal.strip('-'); s = -1 if normal.startswith('-') else 1
+    off = Vector({'X': (s * h / 2, 0, 0), 'Y': (0, s * h / 2, 0), 'Z': (0, 0, s * h / 2)}[ax])
+    return cyl(r, h, Vector(loc) + off, m, axis=ax, verts=8, bevel=0.004, name='bolt')
+
+def pipe(points, r, m, name='pipe', bend=0.08, verts=10):
+    """A tube through points with rounded bends (a bevelled poly curve)."""
+    cu = bpy.data.curves.new(name, 'CURVE'); cu.dimensions = '3D'; cu.bevel_depth = r; cu.bevel_resolution = 3; cu.use_fill_caps = True
+    sp = cu.splines.new('POLY'); sp.points.add(len(points) - 1)
+    for i, p in enumerate(points): sp.points[i].co = (*p, 1)
+    o = bpy.data.objects.new(name, cu); bpy.context.collection.objects.link(o)
+    bpy.context.view_layer.objects.active = o; o.select_set(True)
+    bpy.ops.object.convert(target='MESH')
+    o = bpy.context.object
+    if bend:
+        b = o.modifiers.new('round', 'BEVEL'); b.affect = 'VERTICES'; b.width = bend; b.segments = 4; b.limit_method = 'ANGLE'; b.angle_limit = math.radians(20)
+    o.data.materials.append(mat(m) if isinstance(m, str) else m)
+    for p in o.data.polygons: p.use_smooth = True
+    return o
+
+def gear(loc, r, teeth, depth, m, axis='Y'):
+    bm = bmesh.new()
+    pts = []
+    for i in range(teeth * 2):
+        a = i / (teeth * 2) * math.tau; rr = r if i % 2 == 0 else r * 0.8
+        pts.append((math.cos(a) * rr, math.sin(a) * rr))
+    top = [bm.verts.new((x, y, depth / 2)) for x, y in pts]; bot = [bm.verts.new((x, y, -depth / 2)) for x, y in pts]
+    bm.faces.new(top); bm.faces.new(list(reversed(bot)))
+    for i in range(len(pts)):
+        j = (i + 1) % len(pts); bm.faces.new((bot[i], bot[j], top[j], top[i]))
+    me = bpy.data.meshes.new('gear'); bm.to_mesh(me); bm.free()
+    o = bpy.data.objects.new('gear', me); bpy.context.collection.objects.link(o)
+    o.location = loc; o.rotation_euler = {'X': (0, math.pi / 2, 0), 'Y': (math.pi / 2, 0, 0), 'Z': (0, 0, 0)}[axis]
+    _finish(o, m, 0.006)
+    cyl(r * 0.3, depth * 1.4, loc, 'steel', axis=axis, verts=8)
+    return o
+
+def vent(center, w, h, normal, slats, m_frame='steelD', m_slat='steel'):
+    """Louvred vent panel on a face (normal 'Y' or '-Y' or 'X' or '-X')."""
+    ax = normal.strip('-'); s = -1 if normal.startswith('-') else 1; c = Vector(center)
+    if ax == 'Y':
+        block((w, 0.02, h), c + Vector((0, s * 0.01, 0)), m_frame, 0.005)
+        for i in range(slats): block((w * 0.84, 0.025, h * 0.5 / slats), c + Vector((0, s * 0.022, -h * 0.4 + i * h * 0.8 / max(1, slats - 1))), m_slat, 0.003)
+    else:
+        block((0.02, w, h), c + Vector((s * 0.01, 0, 0)), m_frame, 0.005)
+        for i in range(slats): block((0.025, w * 0.84, h * 0.5 / slats), c + Vector((s * 0.022, 0, -h * 0.4 + i * h * 0.8 / max(1, slats - 1))), m_slat, 0.003)
+
+def empty(name, loc):
+    o = bpy.data.objects.new(name, None); o.location = loc; bpy.context.collection.objects.link(o); return o
+
+def join(objs, name, parent=None):
+    """Join meshes (modifiers applied) into one object; used for parts that move together."""
+    bpy.ops.object.select_all(action='DESELECT')
+    for o in objs: o.select_set(True)
+    bpy.context.view_layer.objects.active = objs[0]
+    for o in objs:
+        bpy.context.view_layer.objects.active = o
+        for md in list(o.modifiers): bpy.ops.object.modifier_apply(modifier=md.name)
+    bpy.context.view_layer.objects.active = objs[0]
+    bpy.ops.object.join(); o = bpy.context.object; o.name = name
+    if parent: o.parent = parent
+    return o
+
+def export(path):
+    bpy.ops.object.select_all(action='SELECT')
+    bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', export_apply=True, export_yup=True, export_extras=True)
+
+def preview(path, cam_loc=(5, -5, 4), target=(0, 0, 0.6), size=(1000, 800), lens=50, ortho=None):
+    """Clean studio render to check the model (Cycles on the CPU, soft light, grey backdrop)."""
+    sc = bpy.context.scene
+    sc.render.engine = 'CYCLES'; sc.cycles.samples = 48; sc.cycles.use_denoising = False; sc.cycles.samples = 96; sc.cycles.device = 'CPU'
+    sc.render.resolution_x, sc.render.resolution_y = size; sc.render.filepath = path; sc.view_settings.view_transform = 'Standard'
+    w = bpy.data.worlds.new('w'); sc.world = w; w.use_nodes = True; w.node_tree.nodes['Background'].inputs[0].default_value = (0.78, 0.8, 0.82, 1); w.node_tree.nodes['Background'].inputs[1].default_value = 0.9
+    bpy.ops.mesh.primitive_plane_add(size=60, location=(0, 0, 0)); fl = bpy.context.object; fl.data.materials.append(mat('#d7d9db', 0.9)); fl.name = '__floor'
+    sun = bpy.data.lights.new('sun', 'SUN'); sun.energy = 3.2; sun.angle = math.radians(12)
+    so = bpy.data.objects.new('__sun', sun); so.rotation_euler = (math.radians(50), math.radians(10), math.radians(35)); bpy.context.collection.objects.link(so)
+    cd = bpy.data.cameras.new('cam'); cd.lens = lens
+    if ortho: cd.type = 'ORTHO'; cd.ortho_scale = ortho
+    co = bpy.data.objects.new('__cam', cd); bpy.context.collection.objects.link(co); co.location = cam_loc
+    d = Vector(target) - Vector(cam_loc); co.rotation_euler = d.to_track_quat('-Z', 'Y').to_euler(); sc.camera = co
+    bpy.ops.render.render(write_still=True)
+    for n in ('__floor', '__sun', '__cam'): bpy.data.objects.remove(bpy.data.objects[n])
+
+def args():
+    a = sys.argv[sys.argv.index('--') + 1:] if '--' in sys.argv else []
+    return (a[0] if a else None), (a[1] if len(a) > 1 else None)
