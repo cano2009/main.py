@@ -14,7 +14,7 @@ import { ConvexGeometry } from 'three/examples/jsm/geometries/ConvexGeometry.js'
 export const POLISH = { chamfer: true };
 const V3 = THREE.Vector3;
 function chamferGeo(w, h, d) {
-  const c = Math.min(0.045, Math.min(w, h, d) * 0.2, Math.max(w, h, d) * 0.08);
+  const c = Math.min(0.03, Math.min(w, h, d) * 0.14, Math.max(w, h, d) * 0.06);
   if (c < 0.004) return null;
   const pts = [];
   for (const sx of [-1, 1]) for (const sy of [-1, 1]) for (const sz of [-1, 1]) {
@@ -55,7 +55,7 @@ function stylMat(m, o) {
   if (!m || !m.isMeshStandardMaterial || m.userData.lowpoly) return m;
   if (matCache.has(m)) return matCache.get(m);
   const n = m.clone();
-  n.flatShading = false;   // geometry carries the facets (chamfered boxes are flat-faced, cylinders round)
+  n.flatShading = true;    // faceted low-poly look: every face reads as a flat plane of colour
   const keep = (t) => (t && t.isCanvasTexture ? t : null);
   n.map = keep(m.map); n.emissiveMap = keep(m.emissiveMap) || m.emissiveMap;
   n.normalMap = null; n.roughnessMap = null; n.metalnessMap = null; n.aoMap = null;
@@ -231,7 +231,7 @@ export function terrain(o) {
     cols.set([c.r, c.g, c.b], i * 3);
   }
   geo.setAttribute('color', new THREE.BufferAttribute(cols, 3));
-  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: false, roughness: 1 }));
+  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1 }));
   m.receiveShadow = true; m.material.userData.lowpoly = true; m.userData.heightAt = heightAt;
   return m;
 }

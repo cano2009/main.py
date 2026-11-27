@@ -7,7 +7,7 @@ import { bake } from './lowpoly.js';
 const V = THREE.Vector3;
 const lin = (h) => new THREE.Color(h).convertSRGBToLinear();
 const mats = new Map();
-function mat(hex, o) { const k = hex + JSON.stringify(o || {}); if (!mats.has(k)) { const m = new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.75, metalness: 0.05, flatShading: false }, o || {})); m.color = lin(hex); m.userData.lowpoly = true; mats.set(k, m); } return mats.get(k); }
+function mat(hex, o) { const k = hex + JSON.stringify(o || {}); if (!mats.has(k)) { const m = new THREE.MeshStandardMaterial(Object.assign({ roughness: 0.75, metalness: 0.05, flatShading: true }, o || {})); m.color = lin(hex); m.userData.lowpoly = true; mats.set(k, m); } return mats.get(k); }
 const F = { green: mat('#3f7d4c'), greenD: mat('#2f5a3b'), yellow: mat('#e9b830'), steel: mat('#a3a9ad', { metalness: 0.3, roughness: 0.5 }), steelD: mat('#6f767b'), dark: mat('#3c3f42'), stone: mat('#b7b0a4'), stoneD: mat('#9a9387'), brick: mat('#b5553c'), cream: mat('#e9e4d6'), wood: mat('#9a7a52'), black: mat('#1d1f1f') };
 function put(p, m, x, y, z) { m.position.set(x || 0, y || 0, z || 0); m.castShadow = true; m.receiveShadow = true; if (p) p.add(m); return m; }
 const box = (w, h, d, m, x, y, z, p) => put(p, new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m), x, y, z);

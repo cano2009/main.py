@@ -3,6 +3,10 @@
 # in the Fieldworks palette. Every model script imports this, builds into one collection and calls export().
 # Run: blender -b --python <model>.py -- <out.glb> [preview.png]
 import bpy, bmesh, math, sys, os
+
+# Low-poly mode: flat-shaded facets, few segments, single-step bevels (the chunky faceted look of the art direction)
+LOWPOLY = True
+def segs_(n, lo=6): return max(lo, int(round(n * 0.32))) if LOWPOLY else n
 from mathutils import Vector, Matrix
 
 PALETTE = {
@@ -39,11 +43,11 @@ def reset():
 def _finish(o, m, bevel, segs=2, smooth=False):
     if m: o.data.materials.append(m if not isinstance(m, str) else mat(m))
     if bevel:
-        b = o.modifiers.new('bevel', 'BEVEL'); b.width = bevel; b.segments = segs; b.limit_method = 'ANGLE'; b.angle_limit = math.radians(40)
-        b.harden_normals = True
+        b = o.modifiers.new('bevel', 'BEVEL'); b.width = bevel; b.segments = 1 if LOWPOLY else segs; b.limit_method = 'ANGLE'; b.angle_limit = math.radians(40)
+        b.harden_normals = not LOWPOLY
         o.data.use_auto_smooth = True; o.data.auto_smooth_angle = math.radians(35)
     if smooth:
-        for p in o.data.polygons: p.use_smooth = True
+        for p in o.data.polygons: p.use_smooth = not LOWPOLY
         o.data.use_auto_smooth = True; o.data.auto_smooth_angle = math.radians(50)
     return o
 
@@ -55,6 +59,7 @@ def block(size, loc, m, bevel=0.02, rot=(0, 0, 0), name='block', segs=2):
     return _finish(o, m, min(bevel, min(size) * 0.45), segs)
 
 def cyl(r, depth, loc, m, axis='Z', verts=12, bevel=0.01, name='cyl', r2=None, rot=None):
+    verts = segs_(verts, 6) if verts > 8 else verts
     rr = {'X': (0, math.pi / 2, 0), 'Y': (math.pi / 2, 0, 0), 'Z': (0, 0, 0)}[axis] if rot is None else rot
     if r2 is None:
         bpy.ops.mesh.primitive_cylinder_add(vertices=verts, radius=r, depth=depth, location=loc, rotation=rr)
@@ -63,7 +68,7 @@ def cyl(r, depth, loc, m, axis='Z', verts=12, bevel=0.01, name='cyl', r2=None, r
     o = bpy.context.object; o.name = name
     _finish(o, m, min(bevel, r * 0.4, depth * 0.4) if bevel else 0, 2)
     for p in o.data.polygons:
-        if abs(p.normal.dot(Vector((0, 0, 1)))) < 0.5: p.use_smooth = True   # round sides, flat caps
+        if abs(p.normal.dot(Vector((0, 0, 1)))) < 0.5: p.use_smooth = not LOWPOLY   # round sides, flat caps
     return o
 
 def bolt(loc, normal='Y', r=0.03, h=0.02, m='steel'):
@@ -74,7 +79,7 @@ def bolt(loc, normal='Y', r=0.03, h=0.02, m='steel'):
 
 def pipe(points, r, m, name='pipe', bend=0.08, verts=10):
     """A tube through points with rounded bends (a bevelled poly curve)."""
-    cu = bpy.data.curves.new(name, 'CURVE'); cu.dimensions = '3D'; cu.bevel_depth = r; cu.bevel_resolution = 3; cu.use_fill_caps = True
+    cu = bpy.data.curves.new(name, 'CURVE'); cu.dimensions = '3D'; cu.bevel_depth = r; cu.bevel_resolution = 0 if LOWPOLY else 3; cu.use_fill_caps = True
     sp = cu.splines.new('POLY'); sp.points.add(len(points) - 1)
     for i, p in enumerate(points): sp.points[i].co = (*p, 1)
     o = bpy.data.objects.new(name, cu); bpy.context.collection.objects.link(o)
@@ -82,9 +87,9 @@ def pipe(points, r, m, name='pipe', bend=0.08, verts=10):
     bpy.ops.object.convert(target='MESH')
     o = bpy.context.object
     if bend:
-        b = o.modifiers.new('round', 'BEVEL'); b.affect = 'VERTICES'; b.width = bend; b.segments = 4; b.limit_method = 'ANGLE'; b.angle_limit = math.radians(20)
+        b = o.modifiers.new('round', 'BEVEL'); b.affect = 'VERTICES'; b.width = bend; b.segments = 1 if LOWPOLY else 4; b.limit_method = 'ANGLE'; b.angle_limit = math.radians(20)
     o.data.materials.append(mat(m) if isinstance(m, str) else m)
-    for p in o.data.polygons: p.use_smooth = True
+    for p in o.data.polygons: p.use_smooth = not LOWPOLY
     return o
 
 def gear(loc, r, teeth, depth, m, axis='Y'):
@@ -178,7 +183,7 @@ def vault(r_out, thick, length, loc, m, segs=16, name='vault', angle=math.pi, st
     o = bpy.data.objects.new(name, me); bpy.context.collection.objects.link(o); o.location = loc
     _finish(o, m, 0.012)
     for p in o.data.polygons:
-        if abs(p.normal.x) < 0.5: p.use_smooth = True
+        if abs(p.normal.x) < 0.5: p.use_smooth = not LOWPOLY
     return o
 
 def ring(r, tube, loc, m, axis='X', name='ring', segs=24, arc=None):
@@ -192,10 +197,11 @@ def ring(r, tube, loc, m, axis='X', name='ring', segs=24, arc=None):
     bpy.ops.mesh.primitive_torus_add(major_radius=r, minor_radius=tube, major_segments=segs, minor_segments=8, location=loc,
                                      rotation={'X': (0, math.pi / 2, 0), 'Y': (math.pi / 2, 0, 0), 'Z': (0, 0, 0)}[axis])
     o = bpy.context.object; o.name = name; o.data.materials.append(mat(m) if isinstance(m, str) else m)
-    for p in o.data.polygons: p.use_smooth = True
+    for p in o.data.polygons: p.use_smooth = not LOWPOLY
     return o
 
 def lathe(profile, loc, m, axis='Z', segs=32, name='lathe', smooth=True):
+    segs = segs_(segs, 6)
     """Revolve a profile [(radius, height), ...] around an axis through loc. Ends close with caps.
     axis: 'Z' (up), 'Y' or '-Y' (along y), 'X' or '-X'."""
     bm = bmesh.new(); rings = []
@@ -219,11 +225,12 @@ def lathe(profile, loc, m, axis='Z', segs=32, name='lathe', smooth=True):
     o.rotation_euler = {'Z': (0, 0, 0), '-Z': (math.pi, 0, 0), 'Y': (-math.pi / 2, 0, 0), '-Y': (math.pi / 2, 0, 0), 'X': (0, math.pi / 2, 0), '-X': (0, -math.pi / 2, 0)}[axis]
     o.data.materials.append(mat(m) if isinstance(m, str) else m)
     if smooth:
-        for p in o.data.polygons: p.use_smooth = True
+        for p in o.data.polygons: p.use_smooth = not LOWPOLY
         o.data.use_auto_smooth = True; o.data.auto_smooth_angle = math.radians(48)
     return o
 
 def loft(sections, m, n=6, name='loft', smooth=True):
+    n = max(1, n // 3) if LOWPOLY else n
     """A body lofted through rounded-rectangle sections along y: [(y, width, height, zc, round), ...].
     round is the corner radius as a fraction of the smaller side (0.5 = fully rounded). Ends are capped."""
     bm = bmesh.new(); rings = []
@@ -242,6 +249,6 @@ def loft(sections, m, n=6, name='loft', smooth=True):
     o = bpy.data.objects.new(name, me); bpy.context.collection.objects.link(o)
     o.data.materials.append(mat(m) if isinstance(m, str) else m)
     if smooth:
-        for p in o.data.polygons: p.use_smooth = True
+        for p in o.data.polygons: p.use_smooth = not LOWPOLY
         o.data.use_auto_smooth = True; o.data.auto_smooth_angle = math.radians(40)
     return o

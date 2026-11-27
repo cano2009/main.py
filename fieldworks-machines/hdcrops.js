@@ -210,7 +210,7 @@ let shared = null;
 /** Soft-shaded, double-sided vertex-colour material for every crop. */
 export function material() {
   if (shared) return shared;
-  shared = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.55, metalness: 0, side: THREE.DoubleSide });
+  shared = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0, side: THREE.DoubleSide, flatShading: true });
   shared.userData.lowpoly = true;
   return shared;
 }

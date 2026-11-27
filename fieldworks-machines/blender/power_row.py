@@ -37,7 +37,7 @@ def blade(length, c0, c1, twist=20, t=0.07, m=W, name='blade'):
     me = bpy.data.meshes.new(name); bm.to_mesh(me); bm.free()
     o = bpy.data.objects.new(name, me); bpy.context.collection.objects.link(o)
     o.data.materials.append(mat(m, 0.35))
-    for p in o.data.polygons: p.use_smooth = True
+    for p in o.data.polygons: p.use_smooth = not LOWPOLY
     o.data.use_auto_smooth = True; o.data.auto_smooth_angle = math.radians(60)
     return o
 
@@ -57,7 +57,7 @@ def strut(a, b, t, m, round_=False):
     o = bpy.data.objects.new('strut', me); bpy.context.collection.objects.link(o)
     o.data.materials.append(mat(m) if isinstance(m, str) else m)
     if round_:
-        for p in o.data.polygons: p.use_smooth = True
+        for p in o.data.polygons: p.use_smooth = not LOWPOLY
     else:
         bv = o.modifiers.new('bevel', 'BEVEL'); bv.width = min(0.012, t * 0.2); bv.segments = 1
     return o
@@ -66,9 +66,10 @@ def strut(a, b, t, m, round_=False):
 def blade_v2(length, name='blade'):
     """Turbine blade: round root blending into an aerofoil, widest chord at ~22% span, rounded leading edge,
     thin trailing edge, 16 degrees of twist, slight prebend, painted red bands near the tip."""
-    bm = bmesh.new(); N = 24; rings = []; mats_idx = []
-    foil = [(1.0, 0.0), (0.75, 0.035), (0.5, 0.06), (0.3, 0.075), (0.15, 0.075), (0.06, 0.06), (0.015, 0.035), (0.0, 0.0),
-            (0.015, -0.03), (0.06, -0.045), (0.15, -0.05), (0.3, -0.045), (0.5, -0.032), (0.75, -0.016)]
+    bm = bmesh.new(); N = 10 if LOWPOLY else 24; rings = []; mats_idx = []
+    foil = ([(1.0, 0.0), (0.5, 0.06), (0.15, 0.075), (0.0, 0.0), (0.15, -0.05), (0.5, -0.032)] if LOWPOLY else
+            [(1.0, 0.0), (0.75, 0.035), (0.5, 0.06), (0.3, 0.075), (0.15, 0.075), (0.06, 0.06), (0.015, 0.035), (0.0, 0.0),
+             (0.015, -0.03), (0.06, -0.045), (0.15, -0.05), (0.3, -0.045), (0.5, -0.032), (0.75, -0.016)])
     for i in range(N + 1):
         f = i / N; z = f * length
         if f < 0.06:   # round root
@@ -90,7 +91,7 @@ def blade_v2(length, name='blade'):
         rings.append(ring)
     M = len(foil)
     for i, (a, b) in enumerate(zip(rings, rings[1:])):
-        f = (i + 0.5) / N; red = 1 if (0.78 < f < 0.84) or f > 0.9 else 0
+        f = (i + 0.5) / N; red = 1 if (0.78 < f < 0.86) or f > 0.9 else 0
         for k in range(M):
             fc = bm.faces.new((a[k], a[(k + 1) % M], b[(k + 1) % M], b[k])); fc.material_index = red
     fc = bm.faces.new(list(reversed(rings[0]))); fc2 = bm.faces.new(rings[-1]); fc2.material_index = 1
@@ -98,7 +99,7 @@ def blade_v2(length, name='blade'):
     me = bpy.data.meshes.new(name); bm.to_mesh(me); bm.free()
     o = bpy.data.objects.new(name, me); bpy.context.collection.objects.link(o)
     o.data.materials.append(mat(W, 0.32)); o.data.materials.append(mat('#e0412f', 0.4))
-    for p in o.data.polygons: p.use_smooth = True
+    for p in o.data.polygons: p.use_smooth = not LOWPOLY
     o.data.use_auto_smooth = True; o.data.auto_smooth_angle = math.radians(70)
     return o
 
