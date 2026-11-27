@@ -129,7 +129,7 @@ export function windTurbine() {
   box(0.7, 0.18, 0.7, C.offWhite, 0, 1.2, -1.3, yaw);                         // cooler
   cyl(0.02, 0.02, 0.6, 5, C.dark, 0.2, 1.45, -1.55, yaw);                    // anemometer mast
   const anemo = new THREE.Group(); anemo.position.set(0.2, 1.76, -1.55); yaw.add(anemo);
-  for (let k = 0; k < 3; k++) { const a = k * 2.094; const arm = box(0.26, 0.015, 0.015, C.dark, Math.cos(a) * 0.13, 0, Math.sin(a) * 0.13, anemo); arm.rotation.y = -a; const cup = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 4, 0, Math.PI), C.dark); put(anemo, cup, Math.cos(a) * 0.26, 0, Math.sin(a) * 0.26).rotation.y = -a; }
+  for (let k = 0; k < 3; k++) { const a = k * 2.094; const arm = box(0.26, 0.015, 0.015, C.dark, Math.cos(a) * 0.13, 0, Math.sin(a) * 0.13, anemo); arm.rotation.y = -a; const cup = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 4, 0, Math.PI), C.dark); cup.userData.open = true; put(anemo, cup, Math.cos(a) * 0.26, 0, Math.sin(a) * 0.26).rotation.y = -a; }
   const aviation = new V(-0.2, 1.38, -1.55);
   const rotor = new THREE.Group(); rotor.position.set(0, 0.6, 1.08); yaw.add(rotor);
   put(rotor, new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.0, 8).rotateX(Math.PI / 2), C.white), 0, 0, 0.45);
@@ -242,7 +242,7 @@ export function storageTank() {
     const rungs = []; for (let k = 0; k < 4; k++) rungs.push(new THREE.BoxGeometry(0.035, 0.035, 0.4).translate(R + 0.28, 0.14 + k * 0.275, 0));
     merged(rungs, C.yellow, g);
     if (i >= 2) {   // safety cage from 2.2 m up
-      const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.022, 4, 10, Math.PI).rotateX(Math.PI / 2).rotateY(Math.PI / 2), C.yellow);
+      const hoop = new THREE.Mesh(new THREE.TorusGeometry(0.38, 0.022, 4, 10, Math.PI).rotateX(Math.PI / 2).rotateY(Math.PI / 2), C.yellow); hoop.userData.open = true;
       put(g, hoop, R + 0.28, 0.55, 0);
       [-1, 0, 1].forEach((k) => box(0.03, RING_H, 0.03, C.yellow, R + 0.28 + 0.38 * Math.cos(k * 0.9), RING_H / 2, 0.38 * Math.sin(k * 0.9), g));
     }
@@ -263,7 +263,7 @@ export function storageTank() {
   box(0.5, 0.12, 0.5, C.grey, 0.6, 0.18, 0.3, roof).rotation.z = -0.22;                     // roof hatch
   cyl(0.08, 0.08, 0.3, 8, C.steel, 0, 0.7, 0, roof); cyl(0.16, 0.05, 0.12, 8, C.grey, 0, 0.88, 0, roof);   // vent
   [-0.2, 0.2].forEach((z) => box(0.05, 1.0, 0.05, C.yellow, R + 0.28, 0.5, z, roof));       // ladder hand-holds over the rim
-  put(roof, new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.025, 4, 8, Math.PI).rotateY(Math.PI / 2), C.yellow), R + 0.28, 1.0, 0);
+  put(roof, new THREE.Mesh(new THREE.TorusGeometry(0.2, 0.025, 4, 8, Math.PI).rotateY(Math.PI / 2), C.yellow), R + 0.28, 1.0, 0).userData.open = true;
   // inlet elbow into the roof
   tube([[-R - 0.14, 0, -0.4], [-R - 0.14, 0.25, -0.4], [-R + 0.15, 0.3, -0.35]], 0.07, C.steel, roof, { seg: 8 });
   // float on the sight gauge
@@ -273,16 +273,24 @@ export function storageTank() {
   for (let k = 0; k < 10; k++) { const a = k / 10 * Math.PI * 2; cylAxis(0.025, 0.1, 5, C.dark, 'z', Math.cos(a) * 0.27, Math.sin(a) * 0.27, 0.02, man); }
   const outA = new V(Math.sin(0.6) * R, B + 0.25, Math.cos(0.6) * R), outB = outA.clone().add(new V(0.9, 0, 0.9));
   tube([outA, outA.clone().lerp(outB, 0.5), outB], 0.07, C.steel, root, { seg: 6 });
+  const outlets = [{ id: 'out_drone', end: outB, dir: outB.clone().sub(outA).normalize() }];
+  [['out_trough', 2.42], ['out_line', -0.22]].forEach(([id, a]) => {
+    const d = new V(Math.sin(a), 0, Math.cos(a)), s0 = d.clone().multiplyScalar(R).setY(B + 0.25), e = d.clone().multiplyScalar(R + 0.55).setY(B + 0.25);
+    tube([s0, s0.clone().lerp(e, 0.5), e], 0.07, C.steel, root, { seg: 4 });
+    const v = cyl(0.09, 0.14, 8, C.red, 0, 0, 0, root); v.position.copy(s0.clone().lerp(e, 0.45)); cyl(0.02, 0.16, 6, C.dark, v.position.x, v.position.y + 0.1, v.position.z, root);
+    outlets.push({ id, end: e, dir: d });
+  });
+  outlets.forEach((o) => { const f = cylAxis(0.1, 0.04, 10, C.grey, 'y', 0, 0, 0, root); f.position.copy(o.end); f.quaternion.setFromUnitVectors(new V(0, 1, 0), o.dir); o.face = o.end.clone().addScaledVector(o.dir, 0.02); });
   const valve = new THREE.Group(); valve.position.copy(outA.clone().lerp(outB, 0.55)); root.add(valve);
-  box(0.2, 0.2, 0.2, C.red, 0, 0, 0, valve); box(0.22, 0.22, 0.3, C.red, 0, 0.24, 0, valve).rotation.y = Math.PI / 4;
-  const flag = box(0.3, 0.04, 0.06, C.yellow, 0, 0.4, 0, valve);
+  box(0.2, 0.2, 0.2, C.red, 0, 0, 0, valve); box(0.22, 0.22, 0.3, C.red, 0, 0.2, 0, valve).rotation.y = Math.PI / 4;
+  const flag = box(0.3, 0.04, 0.06, C.yellow, 0, 0.33, 0, valve);
   // inlet riser foot (where the well line arrives)
   const inletFoot = new V(-R - 0.14, B, -0.4);
   cyl(0.07, 0.07, B, 8, C.steel, inletFoot.x, B / 2, inletFoot.z, root);
   rings.forEach((g) => bake(g, [])); bake(roof, []); bake(root, [...rings, roof, float, valve]);
   let lastRings = -1;
   return {
-    root, rings, roof, outlet: outB.clone(), inlet: new V(-R - 0.14, 0.1, -0.4),
+    root, rings, roof, outlet: outB.clone(), inlet: new V(-R - 0.14, 0.1, -0.4), outlets,
     animate(dt, sim) {
       const n = sim.level.rings;
       if (n !== lastRings) { lastRings = n; rings.forEach((g, i) => { g.visible = i < n; }); roof.position.y = B + n * RING_H; }
@@ -313,6 +321,7 @@ export function pumpJack() {
   cylAxis(0.22, 0.5, 10, C.blue, 'z', 0, 0, 0, motor); cylAxis(0.24, 0.04, 10, C.dark, 'z', 0, 0, -0.27, motor);
   for (let k = 0; k < 6; k++) { const f = box(0.04, 0.04, 0.46, C.blue, Math.cos(k) * 0.23, Math.sin(k) * 0.23, 0, motor); f.rotation.z = k; }
   box(0.3, 0.06, 0.4, C.dark, 0, -0.24, 0, motor);
+  cylAxis(0.03, 0.14, 6, C.steel, 'z', 0, 0, 0.3, motor);   // shaft
   const motorPulley = cylAxis(0.1, 0.06, 8, C.steel, 'z', 0, 0, 0.36, motor);
   const sheave = cylAxis(0.34, 0.08, 12, C.steel, 'z', CK.x + 0.48, 0.75, 0.36, root);
   for (let k = 0; k < 4; k++) { const sp = box(0.6, 0.03, 0.04, C.dark, 0, 0, 0.05, sheave); sp.rotation.z = k * Math.PI / 4; }
@@ -349,7 +358,9 @@ export function pumpJack() {
   box(0.26, 0.24, 0.26, C.red, -A, 0.6, 0, root);
   cylAxis(0.08, 0.34, 8, C.red, 'z', -A, 0.6, 0.22, root);
   cyl(0.09, 0.07, 0.26, 8, C.red, -A, 0.85, 0, root);
-  const wheel = put(root, new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.018, 4, 10), C.red), -A, 0.6, 0.45);
+  cylAxis(0.02, 0.12, 6, C.steel, 'z', -A, 0.6, -0.18, root);
+  const wheel = put(root, new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.018, 4, 10), C.red), -A, 0.6, -0.24);
+  box(0.2, 0.03, 0.03, C.red, -A, 0.6, -0.24, root); box(0.03, 0.2, 0.03, C.red, -A, 0.6, -0.24, root);
   // control box on a post
   const ctrl = new THREE.Group(); ctrl.position.set(3.9, 0, 1.0); root.add(ctrl);
   box(0.08, 1.4, 0.08, C.steel, 0, 0.7, -0.1, ctrl); box(0.42, 0.52, 0.22, C.grey, 0, 1.15, 0, ctrl);
@@ -459,12 +470,14 @@ export function dronePad() {
   const ch = new THREE.Group(); ch.position.set(-2.15, 0, -1.2); root.add(ch);
   box(0.6, 1.2, 0.42, C.offWhite, 0, 0.6, 0, ch); box(0.66, 0.06, 0.48, C.green, 0, 1.22, 0, ch);
   const chScreen = screen(0.36, 0.22, 192, ch, 0, 0.92, 0.215);
-  tube([[-1.85, 0.4, -1.2], [-1.55, 0.06, -1.0], [-0.5, 0.18, -0.4]], 0.025, C.black, root, { seg: 10, noOutline: true });
+  tube([[-1.85, 0.4, -1.0], [-1.55, 0.19, -0.8], [-0.5, 0.18, -0.4]], 0.025, C.black, root, { seg: 10, noOutline: true });
+  box(0.34, 0.025, 0.34, C.dark, -0.42, 0.172, -0.34, root); box(0.24, 0.01, 0.06, C.yellow, -0.42, 0.186, -0.34, root);   // charge contacts
   // hose reel for the refill line
   const reel = new THREE.Group(); reel.position.set(-2.15, 0, 1.2); root.add(reel);
   [-0.16, 0.16].forEach((z) => cylAxis(0.32, 0.03, 10, C.red, 'z', 0, 0.45, z, reel));
   cylAxis(0.18, 0.3, 10, C.dark, 'z', 0, 0.45, 0, reel);
-  box(0.06, 0.45, 0.06, C.dark, 0, 0.22, 0, reel);
+  box(0.06, 0.45, 0.06, C.dark, 0, 0.22, 0, reel); box(0.4, 0.05, 0.3, C.dark, 0, 0.025, 0, reel);
+  cylAxis(0.04, 0.22, 8, C.steel, 'x', -0.13, 0.12, 0, reel); box(0.06, 0.1, 0.06, C.dark, 0, 0.1, 0, reel);
   bake(root, []);
   return { root, chScreen, charger: ch, reelPos: new V(-2.15, 0.1, 1.2), terminal: new V(-2.15, 0.1, -1.2) };
 }
@@ -517,7 +530,7 @@ export function utilityPole(h) {
     if (i === 1) cyl(0.035, 0.035, 0.3, 5, C.steel, 0, h - 0.1, 0, root);
     cyl(0.05, 0.075, 0.2, 7, C.insul, x, y + 0.1, 0, root);
     cyl(0.085, 0.085, 0.03, 7, C.insul, x, y + 0.13, 0, root);
-    tips.push(new V(x, y + 0.22, 0));
+    tips.push(new V(x, y + 0.15, 0));
   });
   bake(root, []);
   return { root, tips, h };
@@ -551,15 +564,15 @@ export function latticeTower(h) {
       geos.push(strutGeo(new V(s * hw(y), y, -0.35), new V(s * L, y + 0.35, 0), 0.07));
       geos.push(strutGeo(new V(s * hw(y), y, 0.35), new V(s * L, y + 0.35, 0), 0.07));
       geos.push(strutGeo(new V(s * hw(y + 1.1), y + 1.1, 0), new V(s * L, y + 0.4, 0), 0.06));
-      if (j === 0 || s < 0) tips.push(new V(s * L, y - 0.6, 0));
+      if (j === 0 || s < 0) tips.push(new V(s * L, y + 0.35 - 0.7, 0));
     });
   });
   geos.push(strutGeo(new V(0, h, 0), new V(0, h + 1.3, 0), 0.08));
   merged(geos, C.steel, root);
-  tips.forEach((t) => { for (let k = 0; k < 4; k++) cyl(0.13, 0.13, 0.05, 8, C.insul, t.x, t.y + 0.15 + k * 0.13, 0, root); });
+  tips.forEach((t) => { cyl(0.03, 0.03, 0.72, 6, C.steel, t.x, t.y + 0.35, 0, root); for (let k = 0; k < 5; k++) cyl(0.13, 0.13, 0.05, 8, C.insul, t.x, t.y + 0.12 + k * 0.12, 0, root); cyl(0.05, 0.05, 0.06, 6, C.dark, t.x, t.y + 0.02, 0, root); });
   [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([sx, sz]) => box(0.7, 0.35, 0.7, C.concrete, sx * 1.7, 0.1, sz * 1.7, root));
   bake(root, []);
-  return { root, tips: tips.map((t) => t.clone().add(new V(0, 0.08, 0))), h };
+  return { root, tips: tips.map((t) => t.clone().add(new V(0, -0.01, 0))), h };
 }
 // Pad-mounted step-up transformer
 export function transformer() {
@@ -568,7 +581,8 @@ export function transformer() {
   box(1.3, 1.25, 0.95, C.darkGreen, 0, 0.88, 0, root); box(1.36, 0.08, 1.0, C.green, 0, 1.53, 0, root);
   [-1, 1].forEach((s) => { for (let k = 0; k < 6; k++) box(0.24, 0.95, 0.04, C.darkGreen, s * 0.78, 0.82, -0.36 + k * 0.145, root); });
   const tips = [];
-  [-0.38, 0, 0.38].forEach((x) => { for (let k = 0; k < 4; k++) cyl(0.07, 0.07, 0.04, 8, C.bushing, x, 1.65 + k * 0.08, -0.15, root); cyl(0.035, 0.035, 0.42, 6, C.bushing, x, 1.75, -0.15, root); tips.push(new V(x, 2.0, -0.15)); });
+  [-0.38, 0, 0.38].forEach((x) => { for (let k = 0; k < 4; k++) cyl(0.07, 0.07, 0.04, 8, C.bushing, x, 1.65 + k * 0.08, -0.15, root); cyl(0.035, 0.035, 0.42, 6, C.bushing, x, 1.75, -0.15, root); tips.push(new V(x, 1.96, -0.15)); });
+  box(0.44, 0.34, 0.14, C.darkGreen, 0, 0.5, 0.545, root);   // low-voltage cable box
   [-0.3, 0, 0.3].forEach((x) => cyl(0.035, 0.04, 0.16, 6, C.dark, x, 1.65, 0.25, root));
   const warn = label(0.5, 0.26, ['DANGER', 'HIGH VOLTAGE'], { bg: '#f2c21f' }); warn.position.set(0, 0.95, 0.477); root.add(warn);
   bake(root, []);
@@ -595,6 +609,7 @@ export function batteryContainer() {
     for (let k = 0; k < 4; k++) { const b = box(0.6, 0.08, 0.01, C.dark, 0, 0, 0.005, f); b.rotation.z = k * Math.PI / 4; b.userData.noOutline = true; }
     fans.push(f);
   });
+  box(0.5, 0.42, 0.12, C.grey, 1.5, 0.75, Wz / 2 + 0.09, root);   // DC junction box
   const socScreen = screen(0.9, 0.5, 256, null); socScreen.mesh.position.set(1.6, 1.85, Wz / 2 + 0.05); root.add(socScreen.mesh);
   const name = label(1.3, 0.32, ['BESS  ·  Fieldworks Power'], { bg: '#2f5a3b', fg: '#f2efe4' }); name.position.set(-1.0, 2.1, Wz / 2 + 0.05); root.add(name);
   const warn = label(0.5, 0.26, ['LITHIUM', 'BATTERIES'], { bg: '#f2c21f' }); warn.position.set(Lx / 2 + 0.045, 1.9, 0); warn.rotation.y = Math.PI / 2; root.add(warn);
@@ -614,8 +629,8 @@ export function distributionPanel(circuits) {
     box(0.2, 0.34, 0.06, C.black, 0, 0, 0, g);
     const handle = new THREE.Group(); g.add(handle);
     box(0.08, 0.16, 0.06, k === 'main' ? C.red : C.dark, 0, 0.08, 0.05, handle);
-    const l = label(0.24, 0.08, [k.toUpperCase()], { bg: '#f2efe4' }); l.position.set(0, -0.28, 0.035); g.add(l);
-    breakers[k] = { g, handle, led: new V(0, 0.24, 0.04) };
+    const l = label(0.24, 0.08, [k.toUpperCase()], { bg: '#f2efe4' }); l.position.set(0, -0.23, -0.004); g.add(l);
+    breakers[k] = { g, handle, led: new V(0, 0.19, 0.0) };
   });
   bake(root, Object.values(breakers).map((b) => b.handle));
   return { root, flowScreen, breakers, terminal: new V(0, 0.1, 0) };
@@ -648,6 +663,7 @@ export function truck() {
   [-1, 1].forEach((s) => box(0.07, 0.42, 1.9, C.red, s * 0.82, 0.58, -1.85, body));
   box(1.7, 0.42, 0.07, C.red, 0, 0.58, -2.78, body); box(1.7, 0.5, 0.07, C.dark, 0, 0.62, -0.88, body);
   box(1.72, 0.2, 0.12, C.grey, 0, 0.05, 2.25, body); box(1.72, 0.2, 0.12, C.grey, 0, 0.05, -2.82, body);
+  [-0.6, 0.6].forEach((x) => box(0.1, 0.24, 0.1, C.dark, x, 0.2, -2.76, body));   // rear bumper brackets
   const head = [-0.6, 0.6].map((x) => box(0.28, 0.14, 0.04, C.lamp, x, 0.58, 1.93, body));
   head.forEach((m) => { m.userData.noOutline = true; });
   [-0.7, 0.7].forEach((x) => box(0.2, 0.1, 0.04, C.red, x, 0.5, -2.82, body).material = flat('#ff3b2b', { roughness: 0.3 }));
@@ -704,6 +720,7 @@ export function waterTrough() {
   [-1, 1].forEach((s) => { box(2.2, 0.45, 0.06, C.steel, 0, 0.66, s * 0.38, g); box(0.06, 0.45, 0.8, C.steel, s * 1.08, 0.66, 0, g); });
   [-0.9, 0.9].forEach((x) => box(0.12, 0.45, 0.7, C.dark, x, 0.22, 0, g));
   const water = box(2.08, 0.02, 0.68, C.water, 0, 0.75, 0, g); water.userData.noOutline = true;
+  cylAxis(0.045, 0.12, 8, C.steel, 'x', -1.16, 0.7, 0, g);   // inlet stub
   bake(g, [water]);
   return { root: g, water };
 }

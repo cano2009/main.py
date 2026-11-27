@@ -86,7 +86,7 @@ export function washer() {
   // base frame and drip tray
   [-1, 1].forEach((sx) => [-1, 1].forEach((sz) => box(0.09, DY - 0.2, 0.09, L.steelD, sx * 0.62, (DY - 0.2) / 2, sz * 0.6, root)));
   [-1, 1].forEach((sz) => box(1.34, 0.08, 0.09, L.steelD, 0, DY - 0.4, sz * 0.6, root));
-  box(1.3, 0.06, 1.0, L.steel, 0, 0.32, 0, root); box(1.3, 0.12, 0.04, L.steel, 0, 0.38, 0.5, root); box(1.3, 0.12, 0.04, L.steel, 0, 0.38, -0.5, root);
+  box(1.3, 0.06, 1.12, L.steel, 0, 0.32, 0, root); box(1.3, 0.12, 0.04, L.steel, 0, 0.38, 0.56, root); box(1.3, 0.12, 0.04, L.steel, 0, 0.38, -0.56, root);
   // cradle rollers the drum turns on
   [-0.5, 0.5].forEach((x) => [-1, 1].forEach((s) => { cylX(0.07, 0.12, 8, L.dark, x, DY - R + 0.02, s * 0.34, root); box(0.14, 0.1, 0.1, L.steelD, x, DY - R - 0.06, s * 0.34, root); }));
   // the drum (rotates about x)
@@ -130,13 +130,13 @@ export function cutter() {
   const lightMat = new THREE.MeshStandardMaterial({ color: 0x111111, emissive: lin('#dff4ff'), emissiveIntensity: 0.2 }); lightMat.userData.lowpoly = true;
   const lights = [-0.13, 0.13].map((x) => { const m = box(0.05, 0.03, 0.9, lightMat, x, H - 0.27, 0, root); m.userData.noOutline = true; return m; });
   // brush diverter across the belt (spins)
-  const brush = new THREE.Group(); brush.position.set(-0.36, BELT_Y + 0.16, 0); root.add(brush);
-  cylZ(0.035, 1.0, 8, L.steel, 0, 0, 0, brush);
+  const brush = new THREE.Group(); brush.position.set(-0.12, BELT_Y + 0.16, 0); root.add(brush);
+  cylZ(0.035, 1.12, 8, L.steel, 0, 0, 0, brush);
   for (let k = 0; k < 3; k++) { const b = box(0.2, 0.03, 0.9, L.red, 0, 0, 0, brush); b.rotation.z = k * Math.PI / 3; }
   // reject chute and bin on the front
-  const ch = box(0.4, 0.04, 0.6, L.steel, -0.35, 0.62, 0.95, root); ch.rotation.x = 0.45;
-  [-1, 1].forEach((s) => { const w = box(0.03, 0.12, 0.6, L.steel, -0.35 + s * 0.2, 0.67, 0.95, root); w.rotation.x = 0.45; });
-  box(0.55, 0.4, 0.45, L.greenD, -0.35, 0.2, 1.35, root); box(0.5, 0.02, 0.4, L.dark, -0.35, 0.405, 1.35, root);
+  const ch = box(0.4, 0.04, 0.6, L.steel, -0.12, 0.62, 0.95, root); ch.rotation.x = 0.45;
+  [-1, 1].forEach((s) => { const w = box(0.03, 0.12, 0.6, L.steel, -0.12 + s * 0.2, 0.67, 0.95, root); w.rotation.x = 0.45; });
+  box(0.55, 0.4, 0.45, L.greenD, -0.12, 0.2, 1.35, root); box(0.5, 0.02, 0.4, L.dark, -0.12, 0.405, 1.35, root);
   // control box on the back pillar
   box(0.3, 0.36, 0.14, L.cream, 0.26, 1.25, -0.6, root); box(0.2, 0.12, 0.01, mat('#123326'), 0.26, 1.3, -0.528, root);
   bake(root, [brush, ...lights]);
@@ -158,6 +158,7 @@ export function packer() {
   box(0.5, 0.3, 0.5, L.cardboard, -0.1, BELT_Y + 0.11, 0, root);
   [-1, 1].forEach((s) => { const f = box(0.5, 0.02, 0.18, L.cardboard, -0.1, BELT_Y + 0.27, s * 0.33, root); f.rotation.x = s * 0.9; });
   box(0.46, 0.02, 0.46, L.black, -0.1, BELT_Y + 0.265, 0, root);
+  box(0.24, 0.04, 0.62, L.steel, 0.47, BELT_Y - 0.02, 0, root); [-1, 1].forEach((s) => box(0.24, 0.1, 0.03, L.yellow, 0.47, BELT_Y + 0.03, s * 0.3, root));   // infeed lip and guides
   // carriage (moves down to fold and tape)
   const head = new THREE.Group(); root.add(head);
   box(0.3, 0.16, 1.0, L.yellow, 0, 0, 0, head);
@@ -233,4 +234,17 @@ export function vendingMachine() {
   const lamp = box(0.6, 0.02, 0.02, new THREE.MeshStandardMaterial({ color: 0x111111, emissive: lin('#eaf6ff'), emissiveIntensity: 2 }), -0.02, 1.58, 0.33, root); lamp.material.userData.lowpoly = true;
   bake(root, [scr, lamp]);
   return { root, screen: scr, lamp };
+}
+
+/** Gravity roller chute from (x0, y0) down to (x1, y1) along -x: carries packed cartons from the packer onto the pallet. */
+export function chute(x0, y0, x1, y1) {
+  const root = new THREE.Group(); root.name = 'Roller chute'; root.userData.pick = 'line';
+  const a = new V(x0, y0, 0), b = new V(x1, y1, 0), d = b.clone().sub(a), len = d.length(), ang = Math.atan2(d.y, -d.x);
+  const deck = new THREE.Group(); deck.position.copy(a.clone().lerp(b, 0.5)); deck.rotation.z = -ang; root.add(deck);
+  [-1, 1].forEach((s) => box(len, 0.08, 0.05, L.yellow, 0, 0.0, s * 0.3, deck));
+  for (let k = 0; k < Math.floor(len / 0.12); k++) cylZ(0.03, 0.56, 8, L.steel, -len / 2 + 0.06 + k * 0.12, 0.0, 0, deck);
+  [[-1, 0.35], [1, 0.35]].forEach(([s]) => box(0.05, y1 - 0.02, 0.05, L.steelD, x1 + 0.03, (y1 - 0.02) / 2, s * 0.3, root));
+  [[-1], [1]].forEach(([s]) => box(0.05, y0 - 0.02, 0.05, L.steelD, x0 - 0.03, (y0 - 0.02) / 2, s * 0.3, root));
+  bake(root, []);
+  return { root, dirOut: d.clone().normalize() };
 }

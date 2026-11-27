@@ -153,19 +153,22 @@ import { createGraphics, GRADES } from './graphics.js';
 import { createGlow } from './glow.js';
 import { createOutlines } from './outline.js';
 import { Generator, GEN_DEF, buildGenerator } from './generator.js';
-import { WindTurbine, SolarArray, StorageTank, PumpJack, SprayDrone, PowerGrid, FieldSim, LineSim, CROPS } from './sims.js';
+import { WindTurbine, SolarArray, StorageTank, PumpJack, SprayDrone, PowerGrid, FieldSim, LineSim, LINE_DEF, CROPS } from './sims.js';
 import * as LN from './line.js';
 import * as LP from './lpcrops.js';
+import * as PT from './ports.js';
+import * as VA from './validate.js';
 import { money } from './machine.js';
 import * as P from './parts.js';
 import * as Y from './yard.js';
-import { stylize, bake, tree, rock, grassTuft, terrain, terrainHeight } from './lowpoly.js';
+import { stylize, bake, BAKE, tree, rock, grassTuft, terrain, terrainHeight } from './lowpoly.js';
 
 const $ = (id) => document.getElementById(id);
 const V = THREE.Vector3;
 const lin = (h) => new THREE.Color(h).convertSRGBToLinear();
 const qs = new URLSearchParams(location.search);
-let envMats = null, lastDay = -1;            // materials whose reflections dim at night (see dimReflections)
+let envMats = null, lastDay = -1;
+const AUDIT = qs.has('audit'); if (AUDIT) BAKE.enabled = false;   // audit: keep every part separate so the checks can see it            // materials whose reflections dim at night (see dimReflections)
 
 // ---------- layout (metres) ----------
 const POS = {
@@ -293,6 +296,7 @@ const belt = LN.conveyor(LX0, 0.2); lineG.add(belt.root);
 const wsh = LN.washer(); lineG.add(wsh.root);
 const cut = LN.cutter(); lineG.add(cut.root);
 const pak = LN.packer(); lineG.add(pak.root);
+{ const Z = LINE_DEF.zones; wsh.root.position.x = LX0 - Z.wash; cut.root.position.x = LX0 - Z.cut; pak.root.position.x = LX0 - Z.pack - 0.1; }
 const pal = LN.pallet(); pal.root.position.x = -1.75; lineG.add(pal.root);
 const hbin = LN.bin(); hbin.root.position.x = LX0 + 0.75; lineG.add(hbin.root);
 const washT = LN.washTable(); washT.root.position.set(2.2, 0, LZ - 1.6); washT.root.rotation.y = Math.PI; scene.add(washT.root);
@@ -328,31 +332,64 @@ tr.headlights.forEach((m) => { m.material = m.material.clone(); });
 
 // ---------- power lines and pipes (merged into a few meshes at the end) ----------
 const wireG = new THREE.Group(), pipeG = new THREE.Group();
-const pole = (x, z, toward) => { const p = Y.utilityPole(7.5); p.root.position.set(x, 0, z); p.root.rotation.y = Math.atan2(toward[0] - x, toward[1] - z); scene.add(p.root); stylize(p.root); p.root.updateMatrixWorld(true); p.world = p.tips.map((t) => p.root.localToWorld(t.clone())); return p; };
-const pT = pole(-15, -9.5, [-5.5, -5]), pA = pole(-5.5, -5, [5, -3.5]), pS = pole(-6.5, 2.5, [-5.5, -5]), pB = pole(5, -3.5, [16, -4.6]), pC = pole(16, -4.6, [24.5, -4.2]), pD = pole(24.5, -4.2, [16, -4.6]);
-[[pT, pA, 0.5], [pS, pA, 0.45], [pA, pB, 0.6], [pB, pC, 0.6], [pC, pD, 0.45]].forEach(([a, b, s]) => Y.wires(wireG, a.world, b.world, s));
-[t1, t2].forEach((t) => t.root.updateMatrixWorld(true));
-const t1w = t1.tips.map((p) => t1.root.localToWorld(p.clone())), t2w = t2.tips.map((p) => t2.root.localToWorld(p.clone()));
-Y.wires(wireG, t1w, t2w, 2.2, Y.C.dark, 0.035);
-xf.root.updateMatrixWorld(true);
-const xfw = xf.tips.map((p) => xf.root.localToWorld(p.clone()));
-Y.wires(wireG, xfw, [t1w[0], t1w[2], t1w[1]], 1.2, Y.C.dark, 0.03);
-Y.wires(wireG, t2w, t2w.map((p) => p.clone().add(new V(0, -2, -60))), 2.5, Y.C.dark, 0.035);
-// cable drops and ground runs (pole base to the machine's terminal)
-const world = (obj, v) => { obj.updateMatrixWorld(true); return obj.localToWorld(v.clone()); };
-const drop = (p, to) => { const b = p.root.position; const t = to.clone(); Y.tube([[b.x + 0.12, 6.6, b.z], [b.x + 0.14, 0.1, b.z], [b.x + 0.6, 0.04, b.z], [t.x, 0.04, t.z], [t.x, t.y + 0.2, t.z]], 0.035, Y.C.black, wireG, { seg: 40, noOutline: true }); };
-drop(pT, world(tw.root, tw.terminal)); drop(pS, world(sa.root, sa.terminal)); drop(pA, world(dp.root, new V(-0.6, 0.1, 0.4)));
-drop(pB, world(pad.root, pad.terminal)); drop(pD, world(pj.root, pj.terminal));
-const ground3 = (a, b) => Y.tube([[a.x, a.y, a.z], [a.x, 0.04, a.z], [(a.x + b.x) / 2, 0.04, (a.z + b.z) / 2], [b.x, 0.04, b.z], [b.x, b.y, b.z]], 0.045, Y.C.black, wireG, { seg: 30, noOutline: true });
-ground3(world(dp.root, new V(0.5, 0.3, -0.2)), world(bess.root, new V(1.5, 0.3, 1.22)));
-ground3(world(dp.root, new V(0.7, 0.3, 0.1)), world(gen.root, gen.terminal));
-ground3(world(dp.root, new V(-0.7, 0.3, 0.1)), world(xf.root, xf.lv));
-// water: well line to the tank inlet, tank outlet to the trough and the drone pad hose reel
-const tIn = world(tk.root, tk.inlet), wOut = world(pj.root, pj.wellOutlet), tOut = world(tk.root, tk.outlet);
-Y.tube([wOut, [wOut.x, 0.6, wOut.z + 0.25], [wOut.x, 0.3, wOut.z + 0.55], [wOut.x, 0.1, wOut.z + 0.9], [wOut.x - 1.0, 0.1, -9.6], [13, 0.1, -9.6], [tIn.x - 0.1, 0.1, tIn.z - 0.6], tIn], 0.07, Y.C.steel, pipeG, { seg: 50 });
-const reel = world(pad.root, pad.reelPos), trIn = world(trough.root, new V(-1.1, 0.7, 0));
-Y.tube([tOut, [tOut.x + 0.3, 0.06, tOut.z + 0.6], [11, 0.06, 0.5], [reel.x + 0.2, 0.06, reel.z - 0.2], reel], 0.04, Y.C.green, wireG, { seg: 50, noOutline: true });
-Y.tube([tOut, [tOut.x + 0.4, 0.06, tOut.z - 1.0], [trIn.x - 0.4, 0.06, trIn.z], trIn], 0.045, Y.C.steel, pipeG, { seg: 30 });
+const pole = (x, z, toward, name) => { const p = Y.utilityPole(7.5); p.root.position.set(x, 0, z); p.root.rotation.y = Math.atan2(toward[0] - x, toward[1] - z); scene.add(p.root); stylize(p.root); p.root.name = name; return p; };
+const pT = pole(-15, -9.5, [-5.5, -5], 'Pole T'), pA = pole(-5.5, -5, [5, -3.5], 'Pole A'), pS = pole(-6.5, 2.5, [-5.5, -5], 'Pole S'), pB = pole(5, -3.5, [16, -4.6], 'Pole B'), pC = pole(16, -4.6, [24.5, -4.2], 'Pole C'), pD = pole(24.5, -4.2, [16, -4.6], 'Pole D');
+const pE = pole(4.5, 9.6, [5, -3.5], 'Pole E');   // feeds the processing line and the yard lights on that side
+
+// ---------- connection points: every cable, wire and pipe below runs from one port to another ----------
+const genBox = Y.box(0.22, 0.2, 0.12, Y.C.dark, 0.9, 0.32, -0.46, gen.root);   // generator output terminal box
+const PO = (id, type, io, pos, dir, o) => PT.port(id, type, io, pos, dir, o);
+const MODELS = [];
+const reg = (m, list, name) => { PT.attachPorts(m, list, name); MODELS.push(m); return m; };
+reg(tw, [PO('power', 'power', 'out', [1.76, 0.75, 1.1], [1, 0, 0], { capacity: 45, label: 'Generator output' })], 'Wind turbine');
+reg(sa, [PO('power', 'power', 'out', [3.1, 0.82, 0.3], [0, -1, 0], { capacity: 3.5, label: 'Inverter output' })], 'Solar array');
+reg(bess, [PO('dc', 'power', 'both', [1.5, 0.62, 1.37], [0, 0, 1], { capacity: 25, label: 'Battery terminals' })], 'Battery container');
+reg(dp, ['bus', 'battery', 'generator', 'export', 'line'].map((id, i) => PO(id, 'power', 'both', [-0.6 + i * 0.3, 0.34, 0.26], [0, 0, 1], { capacity: 80, label: id[0].toUpperCase() + id.slice(1) + ' terminal' })), 'Distribution panel');
+reg(gen, [PO('power', 'power', 'out', [0.9, 0.32, -0.52], [0, 0, -1], { capacity: 18, label: 'Generator output' })], 'Generator');
+reg(xf, [PO('lv', 'power', 'in', [0, 0.5, 0.615], [0, 0, 1], { label: 'Low-voltage input' }), ...xf.tips.map((t, i) => PO('hv' + i, 'wire', 'out', t.toArray(), [0, 1, 0], { socket: false, label: 'High-voltage bushing' }))], 'Transformer');
+reg(pj, [PO('supply', 'power', 'in', [3.84, 0.89, 1.0], [0, -1, 0], { capacity: 5.5, label: 'Control box supply' }), PO('motor_out', 'power', 'out', [3.96, 0.89, 1.0], [0, -1, 0], { label: 'Motor feed' }),
+  PO('motor_in', 'power', 'in', [3.05, 0.52, -0.31], [0, 0, -1], { label: 'Motor terminal' }), PO('water', 'water', 'out', [-2.2, 0.6, 0.39], [0, 0, 1], { capacity: 120, label: 'Well outlet' })], 'Pump jack');
+reg(tk, [PO('inlet', 'water', 'in', [-Y.TANK_R - 0.21, 0.15, -0.4], [-1, 0, 0], { label: 'Inlet riser' }), ...tk.outlets.map((o) => PO(o.id, 'water', 'out', o.face.toArray(), o.dir.toArray(), { socket: false, label: 'Outlet ' + o.id.slice(4) }))], 'Storage tank');
+reg(trough, [PO('inlet', 'water', 'in', [-1.22, 0.7, 0], [-1, 0, 0], { socket: false, label: 'Inlet' })], 'Water trough');
+reg(pad, [PO('power', 'power', 'in', [-2.15, 0.25, -1.41], [0, 0, -1], { capacity: 3.2, label: 'Charger supply' }), PO('water', 'water', 'in', [-2.39, 0.12, 1.2], [-1, 0, 0], { socket: false, label: 'Hose reel inlet' })], 'Drone pad');
+[pT, pA, pS, pB, pC, pD, pE].forEach((p) => reg(p, [...p.tips.map((t, i) => PO('w' + i, 'wire', 'both', t.toArray(), [0, 1, 0], { socket: false, optional: true, label: 'Insulator' })),
+  PO('drop', 'power', 'both', [0.13, 6.2, 0], [1, 0, 0], { optional: true, label: 'Drop terminal' }), PO('base', 'power', 'both', [0.165, 0.35, 0], [1, 0, 0], { optional: true, label: 'Base junction' })], p.root.name));
+reg(t1, t1.tips.map((t, i) => PO('w' + i, 'wire', 'both', t.toArray(), [0, -1, 0], { socket: false, label: 'Insulator string' })), 'Tower 1');
+reg(t2, t2.tips.map((t, i) => PO('w' + i, 'wire', 'both', t.toArray(), [0, -1, 0], { socket: false, optional: true, label: 'Insulator string' })), 'Tower 2');
+lamps.forEach((l, i) => reg(l, [PO('power', 'power', 'in', [-0.2, 0.1, 0], [-1, 0, 0], { label: 'Lamp supply' })], 'Yard light ' + (i + 1)));
+reg(vend, [PO('power', 'power', 'in', [0, 0.22, -0.35], [0, 0, -1], { label: 'Cooler supply' })], 'Drinks cooler');
+reg(wsh, [PO('water', 'water', 'in', [0.0, 0.35, -1.175], [0, 0, -1], { label: 'Wash water inlet' })], 'Drum washer');
+reg(cut, [PO('power', 'power', 'in', [0.41, 1.25, -0.6], [1, 0, 0], { capacity: 6, label: 'Line control supply' })], 'Optical sorter');
+const chu = LN.chute(-0.85, 0.72, -1.22, 0.2); lineG.add(chu.root); stylize(chu.root);
+reg(hbin, [PO('out', 'conveyor', 'out', [-0.79, 0.79, 0], [-1, 0, 0], { socket: false, label: 'Hopper chute' })], 'Harvest hopper');
+reg(belt, [PO('in', 'conveyor', 'in', [LX0, LN.BELT_Y - 0.02, 0], [1, 0, 0], { socket: false, label: 'Belt infeed' }), PO('out', 'conveyor', 'out', [0.2, LN.BELT_Y - 0.02, 0], [-1, 0, 0], { socket: false, label: 'Belt discharge' })], 'Main conveyor');
+reg(pak, [PO('in', 'conveyor', 'in', [0.59, LN.BELT_Y - 0.02, 0], [1, 0, 0], { socket: false, label: 'Packer infeed' }), PO('out', 'conveyor', 'out', [-0.55, 0.72, 0], [-1, 0, 0], { socket: false, label: 'Carton outfeed' })], 'Carton packer');
+reg(chu, [PO('in', 'conveyor', 'in', [-0.85, 0.72, 0], [1, 0, 0], { socket: false, label: 'Chute top' }), PO('out', 'conveyor', 'out', [-1.22, 0.2, 0], chu.dirOut.toArray(), { socket: false, label: 'Chute bottom' })], 'Roller chute');
+reg(pal, [PO('in', 'conveyor', 'in', [0.53, 0.2, 0], chu.dirOut.clone().negate().toArray(), { socket: false, label: 'Pallet drop zone' })], 'Pallet');
+const net = PT.createNetwork(), find = PT.find;
+const cable = (a, b, h) => net.link(a, b, 'cable', (pa, pb, da, db) => PT.tubePath(PT.groundRoute(pa, pb, da, db, h), 0.03, Y.C.black, wireG));
+const pipe = (a, b, r, mat) => net.link(a, b, 'pipe', (pa, pb, da, db) => PT.tubePath(PT.groundRoute(pa, pb, da, db, (r || 0.06) + 0.01), r || 0.06, mat || Y.C.steel, pipeG));
+const span = (a, b, sag, r, mat) => a.forEach((p, i) => net.link(p, b[i], 'wire', (pa, pb) => Y.tube(Y.catenary(pa, pb, sag), r || 0.022, mat || Y.C.black, wireG, { seg: 16, radial: 4, noOutline: true })));
+const WP = (m) => m.ports.filter((p) => p.type === "wire");
+// overhead network
+span(WP(pT), WP(pA), 0.5); span(WP(pS), WP(pA), 0.45); span(WP(pA), WP(pB), 0.6); span(WP(pB), WP(pC), 0.6); span(WP(pC), WP(pD), 0.45); span(WP(pB), WP(pE), 0.7);
+span(WP(xf), [WP(t1)[0], WP(t1)[2], WP(t1)[1]], 1.2, 0.03, Y.C.dark); span(WP(t1), WP(t2), 2.2, 0.035, Y.C.dark);
+// drops from the poles to the machines, and ground cables in the yard
+cable(find(pT, 'drop'), find(tw, 'power')); cable(find(pS, 'drop'), find(sa, 'power')); cable(find(pA, 'drop'), find(dp, 'bus'));
+cable(find(pB, 'drop'), find(pad, 'power')); cable(find(pD, 'drop'), find(pj, 'supply')); cable(find(pj, 'motor_out'), find(pj, 'motor_in'));
+cable(find(pE, 'drop'), find(cut, 'power'));
+cable(find(dp, 'battery'), find(bess, 'dc')); cable(find(dp, 'generator'), find(gen, 'power')); cable(find(dp, 'export'), find(xf, 'lv'));
+cable(find(dp, 'line'), find(pE, 'base'));
+[[0, pB], [1, pC], [2, pS], [3, pA]].forEach(([i, p]) => cable(find(p, 'base'), find(lamps[i], 'power')));
+cable(find(pS, 'base'), find(vend, 'power'));
+// water
+pipe(find(pj, 'water'), find(tk, 'inlet'), 0.07);
+pipe(find(tk, 'out_trough'), find(trough, 'inlet'), 0.045);
+pipe(find(tk, 'out_drone'), find(pad, 'water'), 0.04, Y.C.green);
+pipe(find(tk, 'out_line'), find(wsh, 'water'), 0.05);
+// conveyor joints (must touch and line up)
+net.link(find(hbin, 'out'), find(belt, 'in'), 'direct'); net.link(find(belt, 'out'), find(pak, 'in'), 'direct');
+net.link(find(pak, 'out'), find(chu, 'in'), 'direct'); net.link(find(chu, 'out'), find(pal, 'in'), 'direct');
 scene.add(mergeByMaterial(wireG)); { const pm = mergeByMaterial(pipeG); stylize(pm); scene.add(pm); }
 
 // ---------- glowing state lights (after stylize) ----------
@@ -382,7 +419,7 @@ const drone = new SprayDrone(FIELD, { x: POS.pad.x, z: POS.pad.z });
 const grid = new PowerGrid();
 const lineSim = new LineSim(); ['radish', 'carrot', 'wheat', 'cabbage', 'pumpkin', 'corn'].forEach((c) => lineSim.addToBin(c, 2, CROPS[c].value));
 const ZX = (s) => LX0 - s;   // belt distance -> x
-wsh.root.position.x = ZX(lineSim.def.zones.wash); cut.root.position.x = ZX(lineSim.def.zones.cut); pak.root.position.x = ZX(lineSim.def.zones.pack) - 0.1;
+
 const gsim = new Generator(GEN_DEF, false); gsim.on = false; gsim.log = [];
 const TROUGH_LPM = 10, LIGHT_KW = 0.7;
 let wallet = 12000, hour = 12.5, speed = 1, clockRuns = true, windBase = 6, weather = 'clear', gameT = 0;
@@ -427,7 +464,8 @@ const W = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
 W.broadphase = new CANNON.SAPBroadphase(W); W.allowSleep = true;
 W.defaultContactMaterial.friction = 0.45; W.defaultContactMaterial.restitution = 0.12;
 const groundBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() }); groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0); groundBody.updateAABB(); W.addBody(groundBody);
-const addStatic = (shape, x, y, z, ry) => { const b = new CANNON.Body({ mass: 0 }); b.addShape(shape); b.position.set(x, y, z); if (ry) b.quaternion.setFromEuler(0, ry, 0); b.updateAABB(); W.addBody(b); return b; };   // static bodies keep a stale box unless told
+const STATICS = [];
+const addStatic = (shape, x, y, z, ry) => { const b = new CANNON.Body({ mass: 0 }); b.addShape(shape); b.position.set(x, y, z); if (ry) b.quaternion.setFromEuler(0, ry, 0); b.updateAABB(); W.addBody(b); STATICS.push(b); return b; };   // static bodies keep a stale box unless told
 const box3 = (x, y, z) => new CANNON.Box(new CANNON.Vec3(x, y, z));
 addStatic(new CANNON.Cylinder(Y.TANK_R + 0.1, Y.TANK_R + 0.1, 7, 14), POS.tank.x, 3.5, POS.tank.z);
 addStatic(new CANNON.Cylinder(2.2, 2.2, 0.5, 8), POS.wind.x, 0.25, POS.wind.z); addStatic(new CANNON.Cylinder(0.62, 0.62, 15, 8), POS.wind.x, 7.5, POS.wind.z);
@@ -435,10 +473,14 @@ addStatic(box3(3.1, 1.4, 1.25), POS.bess.x, 1.4, POS.bess.z); addStatic(box3(0.8
 addStatic(box3(1.0, 0.9, 0.8), POS.xfmr.x, 0.9, POS.xfmr.z); addStatic(box3(1.05, 0.85, 0.62), POS.gen.x, 0.85, POS.gen.z);
 addStatic(box3(1.7, 0.08, 1.7), POS.pad.x, 0.08, POS.pad.z); addStatic(box3(2.3, 0.3, 0.7), POS.pump.x + 1.3, 0.3, POS.pump.z);
 addStatic(box3(1.1, 0.45, 0.4), POS.trough.x, 0.45, POS.trough.z);
-[-1.95, 0, 1.95].forEach((x) => addStatic(box3(0.3, 0.15, 0.45), POS.solar.x + x, 0.15, POS.solar.z));
+[-1.95, 0, 1.95].forEach((x) => addStatic(box3(0.3, 0.15, 0.45), POS.solar.x + x, 0.15, POS.solar.z)); addStatic(box3(2.35, 0.5, 1.6), POS.solar.x, 1.5, POS.solar.z);
+addStatic(box3(0.8, 1.5, 0.6), POS.pump.x, 1.5, POS.pump.z); addStatic(box3(0.2, 0.5, 0.2), POS.pump.x - 2.2, 0.5, POS.pump.z); addStatic(box3(0.3, 0.6, 0.3), POS.pump.x + 3.9, 0.6, POS.pump.z + 1.0);
+addStatic(box3(0.3, 0.6, 0.3), POS.wind.x + 1.45 * Math.cos(0.5) + 1.1 * Math.sin(0.5), 0.6, POS.wind.z - 1.45 * Math.sin(0.5) + 1.1 * Math.cos(0.5));
 [[0, -1, 0, 0], [0, 1, 0, 0], [-1, 0, 0, 0], [1, 0, 0, 0]].forEach(([sx, sz]) => { if (sx) addStatic(box3(0.5, 2, 30), sx * 36, 2, -2); else addStatic(box3(40, 2, 0.5), 0, 2, sz > 0 ? 25 : -30); });
 [[FIELD.x0 - 0.8, (FIELD.z0 + FIELD.z1) / 2 + 2, 0.08, (FIELD.z1 - FIELD.z0) / 2 - 1.2], [FIELD.x1 + 0.8, (FIELD.z0 + FIELD.z1) / 2, 0.08, (FIELD.z1 - FIELD.z0) / 2 + 0.8], [(FIELD.x0 + FIELD.x1) / 2, FIELD.z0 - 0.8, (FIELD.x1 - FIELD.x0) / 2 + 0.8, 0.08], [(FIELD.x0 + FIELD.x1) / 2, FIELD.z1 + 0.8, (FIELD.x1 - FIELD.x0) / 2 + 0.8, 0.08]].forEach(([x, z, hx, hz]) => addStatic(box3(hx, 0.55, hz), x, 0.55, z));
-addStatic(box3(6.35, 0.5, 0.62), (LX0 + 0.55) / 2, 0.5, LZ); addStatic(box3(0.7, 0.75, 0.7), ZX(12) - 0.15, 0.75, LZ); addStatic(box3(0.6, 0.55, 0.6), LX0 + 0.75, 0.55, LZ); addStatic(box3(0.6, 0.3, 0.6), -1.75, 0.3, LZ);
+addStatic(box3(6.35, 0.5, 0.62), (LX0 + 0.55) / 2, 0.5, LZ); addStatic(box3(0.7, 1.3, 0.8), LX0 - 12 - 0.1, 1.3, LZ); addStatic(box3(0.72, 0.8, 0.62), LX0 - 4.6, 0.8, LZ); addStatic(box3(0.25, 1.0, 0.75), LX0 - 8.6, 1.0, LZ); addStatic(box3(0.28, 0.2, 0.23), LX0 - 8.72, 0.2, LZ + 1.35);
+addStatic(box3(0.08, 1.7, 0.08), POS.wind.x + 4.6 * Math.cos(0.5) + 3.4 * Math.sin(0.5), 1.7, POS.wind.z - 4.6 * Math.sin(0.5) + 3.4 * Math.cos(0.5));   // windsock pole
+addStatic(box3(0.6, 0.55, 0.6), LX0 + 0.75, 0.55, LZ); addStatic(box3(0.6, 0.3, 0.6), -1.75, 0.3, LZ);
 addStatic(box3(0.5, 0.95, 0.4), -8.3, 0.95, -1.2, 0.35); addStatic(box3(0.5, 0.6, 0.35), 2.2, 0.6, LZ - 1.6);
 const props = [];
 function addProp(kind, x, y, z, o) {
@@ -798,6 +840,30 @@ function animateLine(dt) {
   vend.screen.material.emissiveIntensity = grid.powered.lights ? 1.3 : 0; vend.lamp.material.emissiveIntensity = grid.powered.lights ? 2 : 0;
 }
 
+// ---------- validation (?audit=1): geometry, sockets, links and colliders of every connected model ----------
+function runAudit() {
+  const F = [];
+  const extra = [{ root: gen.root, name: 'Generator' }, { root: tr.root, name: 'Utility truck', flying: true }, { root: dr.root, name: 'Spray drone', flying: true }, { root: pak.root, name: 'Carton packer' }];
+  MODELS.forEach((m) => { if (m === pak || m === gen) return; F.push(...VA.auditGeometry(m, {})); });
+  extra.forEach((m) => F.push(...VA.auditGeometry(Object.assign({}, m.root === pak.root ? pak : m.root === gen.root ? gen : {}, m), { flying: m.flying })));
+  F.push(...VA.auditNetwork(MODELS, net));
+  const cols = [tw, sa, tk, pj, bess, dp, xf, gen, trough, wsh, cut, pak, hbin, vend, washT].map((m) => {
+    const mb = new THREE.Box3().setFromObject(m.root);
+    const hits = STATICS.filter((b) => { const lo = b.aabb.lowerBound, hi = b.aabb.upperBound; return new THREE.Box3(new V(lo.x, lo.y, lo.z), new V(hi.x, hi.y, hi.z)).intersectsBox(mb); });
+    const u = new THREE.Box3(); hits.forEach((b) => { const lo = b.aabb.lowerBound, hi = b.aabb.upperBound; if (mb.containsPoint(new V((lo.x + hi.x) / 2, Math.max(lo.y, mb.min.y), (lo.z + hi.z) / 2))) u.union(new THREE.Box3(new V(lo.x, 0, lo.z), new V(hi.x, 1, hi.z))); });
+    return { model: { root: m.root, name: m.name || m.root.name }, box: u.isEmpty() ? null : u };
+  });
+  F.push(...VA.auditColliders(cols));
+  return F;
+}
+if (AUDIT) {
+  const F = runAudit(); window.__audit = F;
+  const errs = F.filter((f) => f.level === 'error').length, warns = F.length - errs;
+  const box = document.createElement('div'); box.className = 'stat'; box.style.cssText = 'max-height:340px;overflow:auto;font:12px var(--font-mono);display:grid;gap:4px';
+  box.innerHTML = `<b>Validation: ${errs} errors, ${warns} warnings, ${MODELS.length + 4} models, ${net.links.length} links</b>` + F.map((f) => `<div style="color:${f.level === 'error' ? 'var(--bad)' : 'var(--warn)'}">${f.model} · ${f.check} · ${f.part}: ${f.detail}</div>`).join('');
+  $('note').after(box);
+}
+
 // ---------- loop ----------
 let paintT = 0, screenT = 0, uiT = 0, aviT = 0;
 function frame(dt) {
@@ -828,7 +894,7 @@ function frame(dt) {
   if (rain.visible) { const p = rainG.attributes.position, t = controls.target; for (let i = 0; i < rainN; i++) { let y = p.getY(i) - dt * 14; if (y < 0) y += 30; p.setY(i, y); } rain.position.set(t.x, 0, t.z); p.needsUpdate = true; }
   applyLighting();
 }
-window.__fw = { lineSim, fieldSim, buildFieldMeshes, tr, camera, controls, wind, solar, tank, pump, drone, grid, gsim, field, props, chassis, vehicle, select, openInspect, frame, render, setTab: (t) => $('tab-' + t).click(), doAction, setHour: (h) => { hour = h; updateEnv(); }, setWind: (w) => { windBase = w; }, setWeather: (w) => { weather = w; }, setSpeed: (s) => { speed = s; }, step: (secs, sp) => { const s0 = speed; speed = sp || 1; for (let i = 0; i < secs * 30; i++) frame(1 / 30); speed = s0; }, drive, setDriving, gfx };
+window.__fw = { runAudit, net, MODELS, lineSim, fieldSim, buildFieldMeshes, tr, camera, controls, wind, solar, tank, pump, drone, grid, gsim, field, props, chassis, vehicle, select, openInspect, frame, render, setTab: (t) => $('tab-' + t).click(), doAction, setHour: (h) => { hour = h; updateEnv(); }, setWind: (w) => { windBase = w; }, setWeather: (w) => { weather = w; }, setSpeed: (s) => { speed = s; }, step: (secs, sp) => { const s0 = speed; speed = sp || 1; for (let i = 0; i < secs * 30; i++) frame(1 / 30); speed = s0; }, drive, setDriving, gfx };
 const clock = new THREE.Clock();
 function loop() {
   const dt = Math.min(clock.getDelta(), 0.05);

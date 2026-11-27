@@ -34,7 +34,7 @@ function hullGeometry(g) {
   hullCache.set(g, h); return h;
 }
 // The reference look is clean faceted shapes without ink lines; set STYLE.outline = true for the toon style.
-export const STYLE = { outline: false };
+export const STYLE = { outline: true };   // bold ink outlines (the master prompt's vending-machine look)
 const outlineMats = new Map();
 function outlineMaterial(th, color) {
   const k = th.toFixed(4) + color;
@@ -87,7 +87,9 @@ export function stylize(root, o) {
  * bake(root, keep): merges every mesh under root that does not move into one mesh per material (far fewer draw
  * calls). keep: objects that animate; they and everything under them stay as they are. Run before stylize().
  */
+export const BAKE = { enabled: true };   // the validator turns this off so every part stays a separate mesh
 export function bake(root, keep) {
+  if (!BAKE.enabled) return root;
   const skip = new Set(keep || []);
   root.updateMatrixWorld(true);
   const inv = new THREE.Matrix4().copy(root.matrixWorld).invert(), m = new THREE.Matrix4();
