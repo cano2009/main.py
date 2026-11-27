@@ -1,0 +1,765 @@
+<meta charset="utf-8">
+<title>Fieldworks Power Yard</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Low-poly power-and-water yard. Header with picker and farm account, the 3D yard, a live strip for the selection,
+   its controls, world controls (time, speed, wind, weather, physics) and an inspection sheet. Single dark look. */
+:root {
+  --bg: #15120d; --panel: #1f1a13; --panel-2: #2a2318; --line: #3a3124; --fg: #efe6d2; --muted: #a89a80;
+  --accent: #e0b552; --accent-ink: #1b150b;
+  --ok: #3fd27a; --warn: #ffae1a; --bad: #ff5a48; --off: #8a8f96; --water: #2fd6ff;
+  --font-display: 'Bricolage Grotesque', 'Arial Narrow', system-ui, sans-serif;
+  --font-body: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.45; margin: 0; }
+.wrap { max-width: 1240px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px 28px; display: grid; gap: 14px; }
+header { display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between; gap: 8px 16px; }
+.eyebrow { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+h1 { margin: 2px 0 0; font-family: var(--font-display); font-weight: 800; font-size: clamp(26px, 6vw, 40px); line-height: 1; letter-spacing: -0.02em; text-wrap: balance; }
+.wallet { font-family: var(--font-mono); font-size: 13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.wallet b { color: var(--fg); font-size: 18px; font-weight: 500; }
+.picker { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 6px; }
+.pick { font: 600 13.5px var(--font-body); color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 10px; padding: 9px 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 8px; min-width: 0; white-space: nowrap; }
+.pick .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--off); flex: none; }
+.pick[aria-pressed="true"] { color: var(--fg); border-color: var(--accent); background: var(--panel-2); }
+.stage { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+@media (min-width: 900px) { .stage.inspecting { grid-template-columns: minmax(0, 1fr) 340px; } }
+.viewport { position: relative; width: 100%; aspect-ratio: 16 / 9.2; min-height: 340px; max-height: 72vh; border-radius: 14px; overflow: hidden; border: 1px solid var(--line); background: #8fb4d0; }
+@media (max-width: 640px) { .viewport { aspect-ratio: 4 / 4.6; } .picker { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.viewport canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+.chip-status { position: absolute; left: 10px; top: 10px; display: inline-flex; align-items: center; gap: 8px; font: 600 12px var(--font-body); background: rgba(21,18,13,0.72); color: var(--fg); padding: 6px 11px; border-radius: 999px; max-width: calc(100% - 20px); }
+.chip-status span:last-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.clock { position: absolute; right: 10px; top: 10px; font: 500 12px var(--font-mono); background: rgba(21,18,13,0.72); color: var(--fg); padding: 6px 11px; border-radius: 999px; font-variant-numeric: tabular-nums; }
+.hint { position: absolute; left: 10px; bottom: 10px; font-family: var(--font-mono); font-size: 11px; color: #f5efe0; background: rgba(21,18,13,0.6); padding: 4px 8px; border-radius: 6px; pointer-events: none; max-width: calc(100% - 20px); }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--off); flex: none; }
+.strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(118px, 1fr)); gap: 8px; }
+.stat { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 9px 11px; min-width: 0; }
+.stat .k { font-family: var(--font-mono); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.stat .v { font-family: var(--font-mono); font-size: 17px; font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.meter { height: 5px; background: #2d261b; border-radius: 3px; margin-top: 6px; overflow: hidden; }
+.meter i { display: block; height: 100%; width: 0; background: var(--accent); transition: width 0.25s; }
+.controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.btn { font: 600 13.5px var(--font-body); color: var(--fg); background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px; padding: 9px 13px; cursor: pointer; }
+.btn.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn:focus-visible, .chip:focus-visible, .pick:focus-visible, .tab:focus-visible, .pad button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.world { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px 18px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.label { font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); margin-right: 2px; min-width: 64px; }
+.chip { font: 500 13px var(--font-body); color: var(--fg); background: var(--panel); border: 1px solid var(--line); border-radius: 999px; padding: 6px 12px; cursor: pointer; }
+.chip[aria-pressed="true"] { border-color: var(--fg); background: var(--panel-2); }
+.sheet { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px; display: grid; gap: 12px; align-content: start; min-width: 0; }
+@media (min-width: 900px) { .sheet { max-height: 72vh; overflow: auto; } }
+.sheet-head { display: flex; justify-content: space-between; align-items: start; gap: 10px; }
+.sheet h2 { margin: 0; font-family: var(--font-display); font-size: 22px; line-height: 1.1; text-wrap: balance; }
+.sheet .sub { color: var(--muted); font-size: 13px; }
+.tabs { display: flex; gap: 4px; flex-wrap: wrap; }
+.tab { font: 600 12.5px var(--font-body); color: var(--muted); background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 6px 9px; cursor: pointer; }
+.tab[aria-selected="true"] { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+dl { margin: 0; display: grid; grid-template-columns: auto 1fr; gap: 6px 12px; }
+dt { color: var(--muted); font-size: 13px; }
+dd { margin: 0; text-align: right; font-family: var(--font-mono); font-size: 13px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.pill { display: inline-block; font: 600 11.5px var(--font-body); padding: 3px 9px; border-radius: 999px; background: #2d261b; }
+.note { color: var(--muted); font-size: 13px; margin: 0; max-width: 78ch; }
+.log { font-family: var(--font-mono); font-size: 12px; color: var(--muted); display: grid; gap: 3px; }
+.toast { position: absolute; left: 50%; top: 52px; transform: translateX(-50%); background: rgba(21,18,13,0.88); border: 1px solid var(--line); padding: 7px 12px; border-radius: 8px; font-size: 13px; pointer-events: none; opacity: 0; transition: opacity 0.3s; max-width: calc(100% - 24px); text-align: center; }
+.toast.show { opacity: 1; }
+.pad { position: absolute; inset: auto 10px 10px 10px; display: flex; justify-content: space-between; gap: 10px; pointer-events: none; }
+.pad div { display: flex; gap: 8px; pointer-events: auto; }
+.pad button { font: 700 14px var(--font-body); width: 64px; height: 56px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.25); background: rgba(21,18,13,0.7); color: var(--fg); touch-action: none; user-select: none; -webkit-user-select: none; }
+.pad button.held { background: var(--accent); color: var(--accent-ink); }
+</style>
+
+<div class="wrap">
+  <header>
+    <div>
+      <div class="eyebrow" id="eyebrow">Fieldworks · power and water yard</div>
+      <h1 id="title">Power yard</h1>
+    </div>
+    <div class="wallet">Farm account <b id="wallet">$12,000</b></div>
+  </header>
+
+  <nav class="picker" aria-label="Choose what to look at" id="picker"></nav>
+
+  <div class="stage" id="stage">
+    <div class="viewport" id="viewport">
+      <span class="chip-status"><span class="dot" id="st-dot"></span><span id="st-text">Starting</span></span>
+      <span class="clock" id="clock">12:00</span>
+      <div class="toast" id="toast" role="status"></div>
+      <span class="hint" id="hint">Drag to look around · tap a machine to inspect it · tap a crate, barrel or pumpkin to push it</span>
+      <div class="pad" id="pad" hidden>
+        <div><button type="button" data-k="left" aria-label="Steer left">Left</button><button type="button" data-k="right" aria-label="Steer right">Right</button></div>
+        <div><button type="button" data-k="brake" aria-label="Brake or reverse">Back</button><button type="button" data-k="gas" aria-label="Accelerate">Gas</button></div>
+      </div>
+    </div>
+    <aside class="sheet" id="sheet" hidden aria-label="Machine information">
+      <div class="sheet-head">
+        <div>
+          <h2 id="i-name">Machine</h2>
+          <div class="sub" id="i-sub"></div>
+        </div>
+        <button type="button" class="btn" id="close">Close</button>
+      </div>
+      <div class="tabs" role="tablist">
+        <button type="button" class="tab" role="tab" id="tab-overview" aria-selected="true">Overview</button>
+        <button type="button" class="tab" role="tab" id="tab-performance" aria-selected="false">Performance</button>
+        <button type="button" class="tab" role="tab" id="tab-resources" aria-selected="false">Resources</button>
+        <button type="button" class="tab" role="tab" id="tab-upgrades" aria-selected="false">Upgrades</button>
+        <button type="button" class="tab" role="tab" id="tab-operation" aria-selected="false">Operation</button>
+      </div>
+      <div id="tab-body"></div>
+    </aside>
+  </div>
+
+  <div class="strip" id="strip"></div>
+  <div class="controls">
+    <button type="button" class="btn" id="b-inspect">Inspect</button>
+    <span id="actions" class="controls"></span>
+  </div>
+
+  <div class="world">
+    <div class="chips" role="group" aria-label="Time of day"><span class="label">Time</span>
+      <button type="button" class="chip" data-hour="6.3">Dawn</button><button type="button" class="chip" data-hour="9">Morning</button><button type="button" class="chip" data-hour="12.5">Noon</button><button type="button" class="chip" data-hour="17.3">Evening</button><button type="button" class="chip" data-hour="22.5">Night</button>
+    </div>
+    <div class="chips" role="group" aria-label="Simulation speed"><span class="label">Speed</span>
+      <button type="button" class="chip" data-speed="1">Real time</button><button type="button" class="chip" data-speed="10">10x</button><button type="button" class="chip" data-speed="60">60x</button><button type="button" class="chip" id="flow" aria-pressed="true">Clock runs</button>
+    </div>
+    <div class="chips" role="group" aria-label="Wind"><span class="label">Wind</span>
+      <button type="button" class="chip" data-wind="1.5">Calm</button><button type="button" class="chip" data-wind="6">Breeze</button><button type="button" class="chip" data-wind="12">Windy</button><button type="button" class="chip" data-wind="27">Storm</button>
+    </div>
+    <div class="chips" role="group" aria-label="Weather"><span class="label">Weather</span>
+      <button type="button" class="chip" data-weather="clear">Clear</button><button type="button" class="chip" data-weather="cloudy">Cloudy</button><button type="button" class="chip" data-weather="rain">Rain</button>
+    </div>
+    <div class="chips" role="group" aria-label="Physics"><span class="label">Physics</span>
+      <button type="button" class="chip" id="p-crate">Drop a crate</button><button type="button" class="chip" id="p-pumpkins">Drop pumpkins</button><button type="button" class="chip" id="p-barrel">Roll a barrel</button>
+    </div>
+  </div>
+  <p class="note" id="note"></p>
+</div>
+
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.147.0/build/three.module.js","three/examples/jsm/":"https://cdn.jsdelivr.net/npm/three@0.147.0/examples/jsm/","cannon-es":"https://cdn.jsdelivr.net/npm/cannon-es@0.20.0/dist/cannon-es.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { mergeBufferGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import * as CANNON from 'cannon-es';
+import { createGraphics, GRADES } from './graphics.js';
+import { createGlow } from './glow.js';
+import { createOutlines } from './outline.js';
+import { Generator, GEN_DEF, buildGenerator } from './generator.js';
+import { WindTurbine, SolarArray, StorageTank, PumpJack, SprayDrone, PowerGrid } from './sims.js';
+import { money } from './machine.js';
+import * as P from './parts.js';
+import * as Y from './yard.js';
+import { stylize, bake, tree, rock, grassTuft, terrain, terrainHeight } from './lowpoly.js';
+
+const $ = (id) => document.getElementById(id);
+const V = THREE.Vector3;
+const lin = (h) => new THREE.Color(h).convertSRGBToLinear();
+const qs = new URLSearchParams(location.search);
+let envMats = null, lastDay = -1;            // materials whose reflections dim at night (see dimReflections)
+
+// ---------- layout (metres) ----------
+const POS = {
+  wind: new V(-20, 0, -14), solar: new V(-11, 0, 5), tank: new V(12, 0, -7), pump: new V(21, 0, -2), pad: new V(8.5, 0, 3),
+  gen: new V(5.5, 0, -9.2), bess: new V(-1.2, 0, -11.2), panel: new V(-1.2, 0, -7.2), xfmr: new V(-8, 0, -9.5),
+  tower1: new V(-10, 0, -25), tower2: new V(-10, 0, -58), trough: new V(15.5, 0, -11), truck: new V(-3, 0, 12)
+};
+const FIELD = { x0: 14, x1: 30, z0: 6, z1: 18 };
+
+// ---------- renderer, scene, camera ----------
+const host = $('viewport');
+const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
+host.prepend(renderer.domElement);
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(lin('#cfe2ee'), 70, 300);
+const hemi = new THREE.HemisphereLight(lin('#d6e8f6'), lin('#6b5a3c'), 0.85); scene.add(hemi);
+const sun = new THREE.DirectionalLight(lin('#fff1d6'), 3); sun.castShadow = true;
+Object.assign(sun.shadow.camera, { left: -38, right: 38, top: 38, bottom: -38, near: 1, far: 220 });
+sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.05;
+scene.add(sun, sun.target); sun.target.position.set(2, 0, -2);
+const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 700);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true; controls.maxPolarAngle = Math.PI * 0.47; controls.minDistance = 3; controls.maxDistance = 95;
+const touch = matchMedia('(pointer: coarse)').matches || innerWidth < 700;
+const gfx = createGraphics({ renderer, scene, camera, sun, storageKey: 'fw.yard.gfx' });
+gfx.setPreset(qs.get('preset') || (touch ? 'medium' : 'high'));
+gfx.setGrade('farm', 0);
+gfx.setEnvironment('room');
+const glow = createGlow({ scene, quality: touch ? 'low' : 'medium' });
+const outlines = createOutlines({ gfx, scene, camera, quality: touch ? 'low' : 'high' });
+
+// ---------- sky dome, clouds, rain ----------
+const skyU = { top: { value: lin('#4f8fd6') }, horizon: { value: lin('#bfe0f2') }, bottom: { value: lin('#a7b48a') }, sunDir: { value: new V(0, 1, 0) }, sunCol: { value: new THREE.Color(1, 0.9, 0.7) } };
+const sky = new THREE.Mesh(new THREE.SphereGeometry(520, 32, 16), new THREE.ShaderMaterial({
+  uniforms: skyU, side: THREE.BackSide, depthWrite: false, fog: false,
+  vertexShader: 'varying vec3 vD; void main(){ vD = normalize(position); gl_Position = projectionMatrix * modelViewMatrix * vec4(position,1.0); }',
+  fragmentShader: `uniform vec3 top; uniform vec3 horizon; uniform vec3 bottom; uniform vec3 sunDir; uniform vec3 sunCol; varying vec3 vD;
+    void main(){ float h = vD.y; vec3 c = h > 0.0 ? mix(horizon, top, pow(clamp(h,0.0,1.0), 0.55)) : mix(horizon, bottom, clamp(-h*6.0,0.0,1.0));
+      float s = max(0.0, dot(normalize(vD), normalize(sunDir))); c += sunCol * (pow(s, 900.0) * 18.0 + pow(s, 12.0) * 0.35);
+      gl_FragColor = vec4(c, 1.0); }`
+}));
+sky.renderOrder = -1; scene.add(sky);
+const cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1, flatShading: true }); cloudMat.userData.lowpoly = true;
+const clouds = [];
+for (let i = 0; i < 12; i++) {
+  const g = new THREE.Group(); let s = i * 97 + 3; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  for (let k = 0; k < 4 + Math.floor(r() * 3); k++) { const m = new THREE.Mesh(new THREE.IcosahedronGeometry(3 + r() * 3, 0), cloudMat); m.position.set((r() - 0.5) * 12, (r() - 0.5) * 2, (r() - 0.5) * 6); m.scale.y = 0.6; g.add(m); }
+  g.position.set((r() - 0.5) * 300, 48 + r() * 18, (r() - 0.5) * 260); g.userData.v = 0.6 + r() * 0.8; scene.add(g); clouds.push(g);
+}
+const rainN = 1400, rainPos = new Float32Array(rainN * 3);
+for (let i = 0; i < rainN; i++) { rainPos[i * 3] = (Math.random() - 0.5) * 60; rainPos[i * 3 + 1] = Math.random() * 30; rainPos[i * 3 + 2] = (Math.random() - 0.5) * 60; }
+const rainG = new THREE.BufferGeometry(); rainG.setAttribute('position', new THREE.BufferAttribute(rainPos, 3));
+const rain = new THREE.Points(rainG, new THREE.PointsMaterial({ color: lin('#c9d8e6'), size: 0.08, transparent: true, opacity: 0.6, depthWrite: false }));
+rain.frustumCulled = false; rain.visible = false; scene.add(rain);
+
+// ---------- terrain, nature, field ----------
+const ground = terrain({ size: 260, seg: 110, flatR: 34, paths: [(x) => 0.5 + x * 0.02] });
+scene.add(ground);
+const yardPad = new THREE.Mesh(new THREE.PlaneGeometry(34, 26).rotateX(-Math.PI / 2), Y.flat('#9e978a', { roughness: 0.95 }));
+yardPad.position.set(-2, 0.012, -7.5); yardPad.receiveShadow = true; scene.add(yardPad);
+// merge static decoration by material: one draw call per material, outlined as one hull
+function mergeByMaterial(group) {
+  group.updateMatrixWorld(true);
+  const byMat = new Map();
+  group.traverse((o) => { if (!o.isMesh) return; const g = o.geometry.index ? o.geometry.toNonIndexed() : o.geometry.clone(); g.applyMatrix4(o.matrixWorld); ['uv', 'uv2'].forEach((a) => g.deleteAttribute(a)); if (!byMat.has(o.material)) byMat.set(o.material, []); byMat.get(o.material).push(g); });
+  const out = new THREE.Group();
+  byMat.forEach((list, mat) => { const m = new THREE.Mesh(mergeBufferGeometries(list, false), mat); m.castShadow = true; m.receiveShadow = true; out.add(m); });
+  return out;
+}
+const nature = new THREE.Group(), grass = new THREE.Group();
+(function () {
+  let s = 77; const r = () => (s = (s * 16807) % 2147483647) / 2147483647;
+  const spots = [];
+  for (let i = 0; i < 70; i++) {
+    const a = r() * Math.PI * 2, d = 44 + r() * 60; const x = Math.cos(a) * d * 1.2, z = Math.sin(a) * d;
+    if (Math.abs(x + 10) < 6 && z < -15) continue;                         // keep the power line corridor clear
+    spots.push([x, z]);
+  }
+  [[-30, 16], [-33, 10], [33, 22], [36, -8], [-36, -20], [27, -20], [-24, 24], [5, 26], [-14, 25]].forEach((p) => spots.push(p));
+  spots.forEach(([x, z], i) => {
+    const kind = i % 7 === 0 ? 'birch' : i % 9 === 0 ? 'autumn' : i % 11 === 0 ? 'apple' : 'oak';
+    const t = tree(kind, i * 13 + 5); t.position.set(x, terrainHeight(x, z, 34) - 0.05, z); t.rotation.y = r() * 6; t.scale.setScalar(1.3 + r() * 0.9); nature.add(t);
+  });
+  for (let i = 0; i < 46; i++) { const a = r() * 6.28, d = 30 + r() * 60, x = Math.cos(a) * d * 1.2, z = Math.sin(a) * d; const k = rock(0.4 + r() * 1.0, i + 3); k.position.set(x, terrainHeight(x, z, 34), z); k.rotation.y = r() * 6; nature.add(k); }
+  for (let i = 0; i < 160; i++) { const x = (r() - 0.5) * 70, z = (r() - 0.5) * 56; if (x > -20 && x < 18 && z > -20 && z < 6) continue; if (x > 13 && x < 31 && z > 5 && z < 19) continue; const g = grassTuft(i + 9); g.position.set(x, 0, z); grass.add(g); }
+  // fence around the crop field
+  const fence = new THREE.Group(), x0 = FIELD.x0 - 0.8, x1 = FIELD.x1 + 0.8, z0 = FIELD.z0 - 0.8, z1 = FIELD.z1 + 0.8;
+  const side = (ax, az, bx, bz) => { const L = Math.hypot(bx - ax, bz - az), n = Math.ceil(L / 2.4); for (let k = 0; k <= n; k++) { const t = k / n; Y.box(0.12, 1.1, 0.12, Y.C.woodDark, ax + (bx - ax) * t, 0.55, az + (bz - az) * t, fence); } [0.45, 0.85].forEach((y) => { const m = Y.box(L, 0.08, 0.05, Y.C.wood, (ax + bx) / 2, y, (az + bz) / 2, fence); m.rotation.y = -Math.atan2(bz - az, bx - ax); }); };
+  side(x0, z0, x1, z0); side(x1, z0, x1, z1); side(x1, z1, x0, z1); side(x0, z1, x0, z0 + 4);
+  nature.add(fence);
+})();
+const natureMerged = mergeByMaterial(nature); stylize(natureMerged, { minSize: 0.3, thickness: 0.03 }); scene.add(natureMerged, mergeByMaterial(grass));
+const field = Y.cropField(FIELD, scene);
+
+// ---------- machines ----------
+const tw = Y.windTurbine(); tw.root.position.copy(POS.wind); tw.root.rotation.y = 0.5; scene.add(tw.root);
+const sa = Y.solarArray(); sa.root.position.copy(POS.solar); scene.add(sa.root);
+const tk = Y.storageTank(); tk.root.position.copy(POS.tank); scene.add(tk.root);
+const pj = Y.pumpJack(); pj.root.position.copy(POS.pump); scene.add(pj.root);
+const dr = Y.sprayDrone(); scene.add(dr.root);
+const pad = Y.dronePad(); pad.root.position.copy(POS.pad); scene.add(pad.root);
+const bess = Y.batteryContainer(); bess.root.position.copy(POS.bess); scene.add(bess.root);
+const CIRCUITS = ['pump', 'charger', 'lights'];
+const dp = Y.distributionPanel(CIRCUITS); dp.root.position.copy(POS.panel); scene.add(dp.root);
+const xf = Y.transformer(); xf.root.position.copy(POS.xfmr); xf.root.rotation.y = Math.PI; scene.add(xf.root);
+const t1 = Y.latticeTower(17); t1.root.position.copy(POS.tower1); scene.add(t1.root);
+const t2 = Y.latticeTower(17); t2.root.position.set(POS.tower2.x, terrainHeight(POS.tower2.x, POS.tower2.z, 34) - 0.1, POS.tower2.z); scene.add(t2.root);
+const trough = Y.waterTrough(); trough.root.position.copy(POS.trough); scene.add(trough.root);
+const GM = P.materials();
+const gen = buildGenerator(GM);
+{ const L = gen.live, keep = [...L.spinners.map((x) => x.obj), L.fan, L.cap, ...Object.values(L.gauges), L.key, ...(L.pilots || []), L.screen].filter(Boolean); bake(L.eng, keep); bake(gen.root, [L.eng, ...keep]); }
+gen.root.position.copy(POS.gen); gen.root.rotation.y = Math.PI; scene.add(gen.root);
+gen.root.userData.pick = 'gen';
+const tr = Y.truck(); scene.add(tr.root);
+const lamps = [new V(2.5, 0, -2), new V(10.5, 0, -3.2), new V(-5, 0, 1.5), new V(-6, 0, -14)].map((p, i) => {
+  const l = Y.lampPost(); l.root.position.copy(p); l.root.rotation.y = [Math.PI * 0.75, Math.PI, -Math.PI * 0.2, Math.PI * 0.4][i]; scene.add(l.root);
+  const light = new THREE.PointLight(lin('#ffcf8a'), 0, 16, 2); l.root.add(light); light.position.copy(l.lightPos);
+  l.light = light; l.lens.material = l.lens.material.clone(); return l;
+});
+tr.headlights.forEach((m) => { m.material = m.material.clone(); });
+[tw.root, sa.root, tk.root, pj.root, dr.root, pad.root, bess.root, dp.root, xf.root, t1.root, t2.root, trough.root, gen.root, tr.root, ...lamps.map((l) => l.root)].forEach((r) => stylize(r));
+
+// ---------- power lines and pipes (merged into a few meshes at the end) ----------
+const wireG = new THREE.Group(), pipeG = new THREE.Group();
+const pole = (x, z, toward) => { const p = Y.utilityPole(7.5); p.root.position.set(x, 0, z); p.root.rotation.y = Math.atan2(toward[0] - x, toward[1] - z); scene.add(p.root); stylize(p.root); p.root.updateMatrixWorld(true); p.world = p.tips.map((t) => p.root.localToWorld(t.clone())); return p; };
+const pT = pole(-15, -9.5, [-5.5, -5]), pA = pole(-5.5, -5, [5, -3.5]), pS = pole(-6.5, 2.5, [-5.5, -5]), pB = pole(5, -3.5, [16, -4.6]), pC = pole(16, -4.6, [24.5, -4.2]), pD = pole(24.5, -4.2, [16, -4.6]);
+[[pT, pA, 0.5], [pS, pA, 0.45], [pA, pB, 0.6], [pB, pC, 0.6], [pC, pD, 0.45]].forEach(([a, b, s]) => Y.wires(wireG, a.world, b.world, s));
+[t1, t2].forEach((t) => t.root.updateMatrixWorld(true));
+const t1w = t1.tips.map((p) => t1.root.localToWorld(p.clone())), t2w = t2.tips.map((p) => t2.root.localToWorld(p.clone()));
+Y.wires(wireG, t1w, t2w, 2.2, Y.C.dark, 0.035);
+xf.root.updateMatrixWorld(true);
+const xfw = xf.tips.map((p) => xf.root.localToWorld(p.clone()));
+Y.wires(wireG, xfw, [t1w[0], t1w[2], t1w[1]], 1.2, Y.C.dark, 0.03);
+Y.wires(wireG, t2w, t2w.map((p) => p.clone().add(new V(0, -2, -60))), 2.5, Y.C.dark, 0.035);
+// cable drops and ground runs (pole base to the machine's terminal)
+const world = (obj, v) => { obj.updateMatrixWorld(true); return obj.localToWorld(v.clone()); };
+const drop = (p, to) => { const b = p.root.position; const t = to.clone(); Y.tube([[b.x + 0.12, 6.6, b.z], [b.x + 0.14, 0.1, b.z], [b.x + 0.6, 0.04, b.z], [t.x, 0.04, t.z], [t.x, t.y + 0.2, t.z]], 0.035, Y.C.black, wireG, { seg: 40, noOutline: true }); };
+drop(pT, world(tw.root, tw.terminal)); drop(pS, world(sa.root, sa.terminal)); drop(pA, world(dp.root, new V(-0.6, 0.1, 0.4)));
+drop(pB, world(pad.root, pad.terminal)); drop(pD, world(pj.root, pj.terminal));
+const ground3 = (a, b) => Y.tube([[a.x, a.y, a.z], [a.x, 0.04, a.z], [(a.x + b.x) / 2, 0.04, (a.z + b.z) / 2], [b.x, 0.04, b.z], [b.x, b.y, b.z]], 0.045, Y.C.black, wireG, { seg: 30, noOutline: true });
+ground3(world(dp.root, new V(0.5, 0.3, -0.2)), world(bess.root, new V(1.5, 0.3, 1.22)));
+ground3(world(dp.root, new V(0.7, 0.3, 0.1)), world(gen.root, gen.terminal));
+ground3(world(dp.root, new V(-0.7, 0.3, 0.1)), world(xf.root, xf.lv));
+// water: well line to the tank inlet, tank outlet to the trough and the drone pad hose reel
+const tIn = world(tk.root, tk.inlet), wOut = world(pj.root, pj.wellOutlet), tOut = world(tk.root, tk.outlet);
+Y.tube([wOut, [wOut.x, 0.6, wOut.z + 0.25], [wOut.x, 0.3, wOut.z + 0.55], [wOut.x, 0.1, wOut.z + 0.9], [wOut.x - 1.0, 0.1, -9.6], [13, 0.1, -9.6], [tIn.x - 0.1, 0.1, tIn.z - 0.6], tIn], 0.07, Y.C.steel, pipeG, { seg: 50 });
+const reel = world(pad.root, pad.reelPos), trIn = world(trough.root, new V(-1.1, 0.7, 0));
+Y.tube([tOut, [tOut.x + 0.3, 0.06, tOut.z + 0.6], [11, 0.06, 0.5], [reel.x + 0.2, 0.06, reel.z - 0.2], reel], 0.04, Y.C.green, wireG, { seg: 50, noOutline: true });
+Y.tube([tOut, [tOut.x + 0.4, 0.06, tOut.z - 1.0], [trIn.x - 0.4, 0.06, trIn.z], trIn], 0.045, Y.C.steel, pipeG, { seg: 30 });
+scene.add(mergeByMaterial(wireG)); { const pm = mergeByMaterial(pipeG); stylize(pm); scene.add(pm); }
+
+// ---------- glowing state lights (after stylize) ----------
+const gW = glow.attach(tw.root, { state: 'running' }); gW.led({ position: new V(1.45, 1.5, 1.3), size: 0.04 });
+gW.strip({ from: new V(1.18, 1.62, 1.3), to: new V(1.72, 1.62, 1.3), width: 0.025 });
+const gAv = glow.attach(tw.yaw, { state: 'stopped' }); gAv.led({ position: tw.aviation, size: 0.08 });
+const gS = glow.attach(sa.inverter, { state: 'running' }); gS.led({ position: new V(0.19, 1.42, 0.12), size: 0.02 });
+gS.strip({ from: new V(-0.22, 0.88, 0.115), to: new V(0.22, 0.88, 0.115), width: 0.015 });
+const gT = glow.attach(tk.root, { state: 'flow' }); gT.led({ position: new V(0, 0.6, Y.TANK_R + 0.1), size: 0.045 });
+const gP = glow.attach(pj.control, { state: 'running' }); gP.stackLight({ position: new V(0.12, 1.41, 0), radius: 0.035, segment: 0.07 });
+const gC = glow.attach(pad.charger, { state: 'running' }); gC.strip({ from: new V(-0.26, 1.15, 0.215), to: new V(0.26, 1.15, 0.215), width: 0.02 });
+gC.led({ position: new V(0.2, 0.7, 0.215), size: 0.025 });
+const gB = glow.attach(bess.root, { state: 'flow' }); gB.strip({ from: bess.stripFrom, to: bess.stripTo, width: 0.035 });
+const gBrk = {}; Object.entries(dp.breakers).forEach(([k, b]) => { gBrk[k] = glow.attach(b.g, { state: 'running' }); gBrk[k].led({ position: b.led, size: 0.022, spill: false }); });
+const gG = glow.attach(gen.root, { state: 'off' }); gG.stackLight({ position: new V(0.85, 1.52, 0.38), radius: 0.03, segment: 0.06 });
+gG.strip({ from: new V(0.3, 1.38, 0.583), to: new V(0.8, 1.38, 0.583), width: 0.01 });
+const fx = Y.sprayFX(scene);
+
+// selectable roots
+const KEY_OF = new Map([[tw.root, 'wind'], [sa.root, 'solar'], [tk.root, 'tank'], [pj.root, 'pump'], [dr.root, 'drone'], [pad.root, 'drone'], [bess.root, 'grid'], [dp.root, 'grid'], [xf.root, 'grid'], [gen.root, 'gen'], [tr.root, 'truck']]);
+KEY_OF.forEach((_, o) => outlines.register(o));
+const ROOT_OF = { wind: tw.root, solar: sa.root, tank: tk.root, pump: pj.root, drone: dr.root, gen: gen.root, grid: dp.root, truck: tr.root };
+
+// ---------- simulations ----------
+const wind = new WindTurbine(), solar = new SolarArray(), tank = new StorageTank(), pump = new PumpJack();
+const drone = new SprayDrone(FIELD, { x: POS.pad.x, z: POS.pad.z });
+const grid = new PowerGrid();
+const gsim = new Generator(GEN_DEF, false); gsim.on = false; gsim.log = [];
+const TROUGH_LPM = 10, LIGHT_KW = 0.7;
+let wallet = 12000, hour = 12.5, speed = 1, clockRuns = true, windBase = 6, weather = 'clear', gameT = 0;
+const env = { hour, sunDir: new V(0, 1, 0), irradiance: 0, wind: 6, windDir: 0.6, airC: 15, dark: false };
+
+function updateEnv() {
+  const a = (hour - 6) / 12 * Math.PI;
+  env.sunDir.set(Math.cos(a) * 0.85, Math.sin(a) * 0.82, 0.42 + 0.22 * Math.max(0, Math.sin(a))).normalize();
+  const wf = weather === 'clear' ? 1 : weather === 'cloudy' ? 0.38 : 0.22;
+  env.irradiance = 1050 * Math.pow(Math.max(0, env.sunDir.y), 1.15) * wf;
+  const gust = 1 + 0.16 * Math.sin(gameT * 0.13) + 0.09 * Math.sin(gameT * 0.71 + 1.3) + (weather === 'rain' ? 0.1 : 0);
+  env.wind = Math.max(0, windBase * gust);
+  env.windDir = 0.55 + 0.4 * Math.sin(gameT * 0.0021);
+  env.airC = 9 + 10 * Math.max(0, env.sunDir.y) - (weather === 'rain' ? 4 : 0);
+  env.dark = env.sunDir.y < 0.06 || (weather === 'rain' && env.sunDir.y < 0.15);
+  env.hour = hour;
+}
+function loads() {
+  const pumpReq = pump.on && !pump.fault ? (tank.accepts() ? pump.level.motorKw * (0.6 + 0.4 * Math.max(pump.spmNow, pump.level.spm * 0.3) / pump.level.spm) / pump.efficiency() : 0.08) : 0.02;
+  const charger = drone.on && drone.state === 'charge' && drone.battPct() < 0.995 ? drone.def.chargeKw : 0.03;
+  return { pump: pumpReq, charger, lights: env.dark ? LIGHT_KW : 0.04 };
+}
+let refillLpm = 0, autoMissionT = 0;
+function simStep(dt) {
+  gameT += dt; if (clockRuns) hour = (hour + dt / 3600) % 24;
+  updateEnv();
+  wind.tick(dt, env); solar.tick(dt, env);
+  wallet += grid.tick(dt, wind.output, solar.output, loads(), gsim);
+  pump.powered = grid.powered.pump; drone.powered = grid.powered.charger;
+  pump.tick(dt, env, tank);
+  const troughL = tank.draw(TROUGH_LPM * dt / 60);
+  const before = drone.liquidL; drone.tick(dt, env, tank); refillLpm = Math.max(0, drone.liquidL - before) / dt * 60;
+  tank.tick(dt, pump.flowLpm, troughL / dt * 60 + refillLpm);
+  field.update(dt, drone.pos, drone.level.swath, drone.spraying);
+  if (drone.state === 'done' && field.wetness() < 0.45) { autoMissionT += dt; if (autoMissionT > 20) { autoMissionT = 0; drone.newMission(); toast('The field is drying out: the drone starts a new spray mission'); } } else autoMissionT = 0;
+}
+
+// ---------- physics (cannon-es) ----------
+const W = new CANNON.World({ gravity: new CANNON.Vec3(0, -9.82, 0) });
+W.broadphase = new CANNON.SAPBroadphase(W); W.allowSleep = true;
+W.defaultContactMaterial.friction = 0.45; W.defaultContactMaterial.restitution = 0.12;
+const groundBody = new CANNON.Body({ mass: 0, shape: new CANNON.Plane() }); groundBody.quaternion.setFromEuler(-Math.PI / 2, 0, 0); groundBody.updateAABB(); W.addBody(groundBody);
+const addStatic = (shape, x, y, z, ry) => { const b = new CANNON.Body({ mass: 0 }); b.addShape(shape); b.position.set(x, y, z); if (ry) b.quaternion.setFromEuler(0, ry, 0); b.updateAABB(); W.addBody(b); return b; };   // static bodies keep a stale box unless told
+const box3 = (x, y, z) => new CANNON.Box(new CANNON.Vec3(x, y, z));
+addStatic(new CANNON.Cylinder(Y.TANK_R + 0.1, Y.TANK_R + 0.1, 7, 14), POS.tank.x, 3.5, POS.tank.z);
+addStatic(new CANNON.Cylinder(2.2, 2.2, 0.5, 8), POS.wind.x, 0.25, POS.wind.z); addStatic(new CANNON.Cylinder(0.62, 0.62, 15, 8), POS.wind.x, 7.5, POS.wind.z);
+addStatic(box3(3.1, 1.4, 1.25), POS.bess.x, 1.4, POS.bess.z); addStatic(box3(0.8, 1.1, 0.35), POS.panel.x, 1.1, POS.panel.z);
+addStatic(box3(1.0, 0.9, 0.8), POS.xfmr.x, 0.9, POS.xfmr.z); addStatic(box3(1.05, 0.85, 0.62), POS.gen.x, 0.85, POS.gen.z);
+addStatic(box3(1.7, 0.08, 1.7), POS.pad.x, 0.08, POS.pad.z); addStatic(box3(2.3, 0.3, 0.7), POS.pump.x + 1.3, 0.3, POS.pump.z);
+addStatic(box3(1.1, 0.45, 0.4), POS.trough.x, 0.45, POS.trough.z);
+[-1.95, 0, 1.95].forEach((x) => addStatic(box3(0.3, 0.15, 0.45), POS.solar.x + x, 0.15, POS.solar.z));
+[[0, -1, 0, 0], [0, 1, 0, 0], [-1, 0, 0, 0], [1, 0, 0, 0]].forEach(([sx, sz]) => { if (sx) addStatic(box3(0.5, 2, 30), sx * 36, 2, -2); else addStatic(box3(40, 2, 0.5), 0, 2, sz > 0 ? 25 : -30); });
+[[FIELD.x0 - 0.8, (FIELD.z0 + FIELD.z1) / 2 + 2, 0.08, (FIELD.z1 - FIELD.z0) / 2 - 1.2], [FIELD.x1 + 0.8, (FIELD.z0 + FIELD.z1) / 2, 0.08, (FIELD.z1 - FIELD.z0) / 2 + 0.8], [(FIELD.x0 + FIELD.x1) / 2, FIELD.z0 - 0.8, (FIELD.x1 - FIELD.x0) / 2 + 0.8, 0.08], [(FIELD.x0 + FIELD.x1) / 2, FIELD.z1 + 0.8, (FIELD.x1 - FIELD.x0) / 2 + 0.8, 0.08]].forEach(([x, z, hx, hz]) => addStatic(box3(hx, 0.55, hz), x, 0.55, z));
+const props = [];
+function addProp(kind, x, y, z, o) {
+  o = o || {};
+  let mesh, body;
+  if (kind === 'crate') { mesh = Y.crate(); body = new CANNON.Body({ mass: 22, shape: box3(0.35, 0.35, 0.35) }); }
+  else if (kind === 'barrel') { mesh = Y.barrel(o.color); body = new CANNON.Body({ mass: 60, shape: new CANNON.Cylinder(0.29, 0.29, 0.88, 10) }); }
+  else if (kind === 'pumpkin') { mesh = Y.pumpkin(o.seed); body = new CANNON.Body({ mass: 7, shape: new CANNON.Sphere(0.24) }); body.angularDamping = 0.4; }
+  else { mesh = Y.hayBale(); body = new CANNON.Body({ mass: 240 }); const q = new CANNON.Quaternion(); q.setFromEuler(0, 0, Math.PI / 2); body.addShape(new CANNON.Cylinder(0.6, 0.6, 1.1, 12), new CANNON.Vec3(), q); }
+  stylize(mesh); scene.add(mesh); mesh.traverse((o) => { if (o.isMesh && o.material.isMeshStandardMaterial && envMats) { envMats.add(o.material); o.material.envMapIntensity = 0.08 + 0.92 * Math.max(0, lastDay); } });
+  body.position.set(x, y, z); if (o.ry) body.quaternion.setFromEuler(o.rx || 0, o.ry, o.rz || 0);
+  body.linearDamping = 0.05; body.angularDamping = Math.max(body.angularDamping, 0.12);
+  body.allowSleep = true; body.sleepSpeedLimit = 0.18; body.sleepTimeLimit = 0.7;
+  if (o.v) body.velocity.set(...o.v); if (o.w) body.angularVelocity.set(...o.w);
+  W.addBody(body);
+  const p = { kind, mesh, body, spawned: !!o.spawned }; mesh.userData.prop = p; props.push(p);
+  if (props.filter((q) => q.spawned).length > 24) { const old = props.find((q) => q.spawned); W.removeBody(old.body); scene.remove(old.mesh); props.splice(props.indexOf(old), 1); }
+  return p;
+}
+[[3, 0.35, 6.5], [3.75, 0.35, 6.4], [3.35, 1.06, 6.45], [4.5, 0.35, 7.3]].forEach(([x, y, z], i) => addProp('crate', x, y, z, { ry: i * 0.2 }));
+[['#2e6aa8', 8.3, -9.6], ['#d6402c', 8.95, -9.4], ['#2e6aa8', 8.6, -10.2], ['#e5b833', 9.3, -10.1]].forEach(([c, x, z]) => addProp('barrel', x, 0.44, z, { color: c }));
+for (let i = 0; i < 8; i++) addProp('pumpkin', 11.3 + (i % 3) * 0.55, 0.25 + Math.floor(i / 5) * 0.45, 9.5 + Math.floor(i / 3) * 0.55, { seed: i + 3 });
+[[-1, 0.6, 8], [0.4, 0.6, 8.6], [-0.3, 1.8, 8.3]].forEach(([x, y, z], i) => addProp('hay', x, y, z, { ry: 0.3 + i * 0.4 }));
+// drone: kinematic body that pushes props out of its way
+const droneBody = new CANNON.Body({ mass: 0, type: CANNON.Body.KINEMATIC, shape: new CANNON.Sphere(0.85) }); W.addBody(droneBody);
+// truck on raycast suspension
+const chassis = new CANNON.Body({ mass: 1450 }); chassis.addShape(box3(0.86, 0.42, 2.5), new CANNON.Vec3(0, 0.5, -0.25));
+chassis.position.set(POS.truck.x, 1.0, POS.truck.z); chassis.quaternion.setFromEuler(0, Math.PI * 0.6, 0); chassis.angularDamping = 0.35; W.addBody(chassis);
+const vehicle = new CANNON.RaycastVehicle({ chassisBody: chassis, indexRightAxis: 0, indexUpAxis: 1, indexForwardAxis: 2 });
+const wheelOpt = { radius: 0.42, directionLocal: new CANNON.Vec3(0, -1, 0), suspensionStiffness: 32, suspensionRestLength: 0.38, frictionSlip: 2.4, dampingRelaxation: 2.4, dampingCompression: 4.2, maxSuspensionForce: 120000, rollInfluence: 0.03, axleLocal: new CANNON.Vec3(-1, 0, 0), maxSuspensionTravel: 0.28, customSlidingRotationalSpeed: -30, useCustomSlidingRotationalSpeed: true };
+tr.wheels.forEach((w) => { vehicle.addWheel(Object.assign({}, wheelOpt, { chassisConnectionPointLocal: new CANNON.Vec3(w.x, 0.3, w.z) })); scene.attach(w.g); });
+vehicle.addToWorld(W);
+const drive = { on: false, gas: 0, brake: 0, steer: 0, keys: new Set(), log: [] };
+const truckSim = {
+  def: { short: 'Truck' }, log: drive.log, time: 0,
+  speed() { return chassis.velocity.length(); },
+  forwardSpeed() { const f = new CANNON.Vec3(0, 0, 1); chassis.quaternion.vmult(f, f); return f.dot(chassis.velocity); },
+  comp(i) { const w = vehicle.wheelInfos[i]; return w.isInContact ? Math.max(0, Math.min(1, 1 - (w.suspensionLength - (wheelOpt.suspensionRestLength - wheelOpt.maxSuspensionTravel)) / (wheelOpt.maxSuspensionTravel * 2))) : 0; },
+  inBed() { const inv = new THREE.Matrix4().copy(tr.root.matrixWorld).invert(), v = new V(); return props.filter((p) => { v.copy(p.mesh.position).applyMatrix4(inv); return Math.abs(v.x) < 0.85 && v.z < -0.9 && v.z > -2.8 && v.y > 0.2 && v.y < 2; }); },
+  status() { if (this.upsideDown()) return 'stopped'; return drive.on ? 'running' : 'waiting'; },
+  upsideDown() { const up = new CANNON.Vec3(0, 1, 0); chassis.quaternion.vmult(up, up); return up.y < 0.3; },
+  reason() { if (this.upsideDown()) return 'On its side - use Recover'; if (!drive.on) return 'Parked'; return `Driving ${Math.round(this.speed() * 3.6)} km/h`; },
+  panel() {
+    const kmh = Math.round(this.speed() * 3.6), bed = this.inBed(), bedKg = bed.reduce((a, p) => a + p.body.mass, 0), contact = vehicle.wheelInfos.filter((w) => w.isInContact).length;
+    const names = ['Front left', 'Front right', 'Rear left', 'Rear right'];
+    return {
+      key: 'truck', title: 'FW-UT2 Utility Truck', sub: 'Fieldworks Motors · Vehicles', status: this.status(), reason: this.reason(),
+      tabs: {
+        overview: [['Type', 'Pickup with load bed'], ['Status', this.reason()], ['Speed', kmh + ' km/h'], ['Mass', '1,450 kg'], ['Drive', 'Rear-wheel'], ['In the bed', `${bed.length} items, ${Math.round(bedKg)} kg`]],
+        performance: [['Speed', kmh + ' km/h'], ['Engine force', Math.round(Math.abs(drive.gas) * 3600) + ' N'], ['Steering', Math.round(drive.steer * 57.3) + '°'], ['Brakes', drive.brake > 0 ? 'Applied' : 'Released'], ['Wheels on the ground', contact + ' of 4'], ...names.map((n, i) => [`Suspension ${n.toLowerCase()}`, Math.round(this.comp(i) * 100) + '%'])],
+        resources: [['Payload', `${Math.round(bedKg)} kg`], ...bed.slice(0, 6).map((p) => [p.kind[0].toUpperCase() + p.kind.slice(1), p.body.mass + ' kg']), ['Suspension', 'Raycast, 4 independent springs'], ['Spring rate', wheelOpt.suspensionStiffness + ' per wheel'], ['Tyre grip', wheelOpt.frictionSlip]],
+        upgrades: { rows: [['Current level', '1 of 1'], ['Next level', 'Not in this demo']], gains: [] },
+        operation: { rows: [['Controls', 'W A S D or the arrow keys, Space to brake'], ['On a phone', 'Use the on-screen buttons'], ['Load it', 'Drop a crate, then push it into the bed']], log: drive.log.slice(0, 6) }
+      },
+      strip: [{ k: 'Speed', v: kmh + ' km/h' }, { k: 'Steering', v: Math.round(drive.steer * 57.3) + '°' }, ...names.map((n, i) => ({ k: n.replace('Front', 'Susp F').replace('Rear', 'Susp R').replace(' left', 'L').replace(' right', 'R'), v: Math.round(this.comp(i) * 100) + '%', f: this.comp(i), c: 'var(--water)' })), { k: 'Load', v: Math.round(bedKg) + ' kg' }],
+      actions: [{ id: 'drive', label: drive.on ? 'Stop driving' : 'Drive the truck', primary: !drive.on }, { id: 'recover', label: 'Recover', disabled: !this.upsideDown() }]
+    };
+  },
+  act(id) {
+    if (id === 'drive') { setDriving(!drive.on); return { msg: drive.on ? 'Driving: W A S D, arrows or the on-screen buttons' : 'Truck parked' }; }
+    if (id === 'recover') { const p = chassis.position; chassis.position.set(p.x, p.y + 1.2, p.z); const e = new THREE.Euler().setFromQuaternion(tr.root.quaternion, 'YXZ'); chassis.quaternion.setFromEuler(0, e.y, 0); chassis.velocity.set(0, 0, 0); chassis.angularVelocity.set(0, 0, 0); drive.log.unshift({ t: gameT, text: 'Recovered onto its wheels' }); return { msg: 'Truck put back on its wheels' }; }
+    return { msg: '' };
+  }
+};
+function setDriving(on) {
+  drive.on = on; $('pad').hidden = !on || !touch; controls.enabled = !on; drive.log.unshift({ t: gameT, text: on ? 'Driver in' : 'Parked' });
+  $('hint').textContent = on ? (touch ? 'Hold the buttons to drive' : 'Drive with W A S D or the arrow keys · Space brakes') : 'Drag to look around · tap a machine to inspect it · tap a crate, barrel or pumpkin to push it';
+  if (!on) { camAnim = null; focus('truck'); }
+}
+addEventListener('keydown', (e) => { if (!drive.on) return; const k = e.key.toLowerCase(); if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright', ' '].includes(k)) { drive.keys.add(k); e.preventDefault(); } });
+addEventListener('keyup', (e) => drive.keys.delete(e.key.toLowerCase()));
+$('pad').querySelectorAll('button').forEach((b) => {
+  const k = b.dataset.k, on = (v) => { b.classList.toggle('held', v); if (v) drive.keys.add('pad-' + k); else drive.keys.delete('pad-' + k); };
+  b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.setPointerCapture(e.pointerId); on(true); });
+  ['pointerup', 'pointercancel', 'lostpointercapture'].forEach((ev) => b.addEventListener(ev, () => on(false)));
+});
+function driveInput(dt) {
+  const K = drive.keys, has = (...a) => a.some((k) => K.has(k));
+  const fwd = drive.on && has('w', 'arrowup', 'pad-gas'), back = drive.on && has('s', 'arrowdown', 'pad-brake'), left = drive.on && has('a', 'arrowleft', 'pad-left'), right = drive.on && has('d', 'arrowright', 'pad-right'), hand = drive.on && has(' ');
+  if (drive.on && (fwd || back || left || right)) chassis.wakeUp();   // engine force does not wake a sleeping body
+  const v = truckSim.forwardSpeed();
+  drive.gas = fwd ? 1 : back ? (v > 0.8 ? 0 : -0.6) : 0;
+  drive.brake = (back && v > 0.8) || hand || !drive.on ? 1 : 0;
+  const target = (left ? 1 : 0) - (right ? 1 : 0), maxSteer = 0.55 - Math.min(0.3, Math.abs(v) * 0.025);
+  drive.steer += (target * maxSteer - drive.steer) * Math.min(1, dt * 5);
+  const F = drive.gas * 3600 * (Math.abs(v) > 16 && drive.gas > 0 ? 0 : 1);
+  vehicle.applyEngineForce(-F, 2); vehicle.applyEngineForce(-F, 3);
+  [0, 1].forEach((i) => vehicle.setSteeringValue(drive.steer, i));
+  for (let i = 0; i < 4; i++) vehicle.setBrake(drive.brake * (drive.on ? 45 : 18), i);
+}
+function syncPhysics() {
+  props.forEach((p) => { p.mesh.position.copy(p.body.position); p.mesh.quaternion.copy(p.body.quaternion); });
+  tr.root.position.copy(chassis.position); tr.root.quaternion.copy(chassis.quaternion);
+  for (let i = 0; i < 4; i++) { vehicle.updateWheelTransform(i); const t = vehicle.wheelInfos[i].worldTransform; tr.wheels[i].g.position.copy(t.position); tr.wheels[i].g.quaternion.copy(t.quaternion); }
+}
+let droneLast = new V();
+function physicsStep(dt) {
+  const target = new V(drone.pos.x, drone.pos.y + 0.55, drone.pos.z);
+  droneBody.velocity.set((target.x - droneLast.x) / Math.max(dt, 1e-3), (target.y - droneLast.y) / Math.max(dt, 1e-3), (target.z - droneLast.z) / Math.max(dt, 1e-3));
+  droneBody.position.set(target.x, target.y, target.z); droneLast.copy(target);
+  driveInput(dt);
+  W.step(1 / 60, dt, 4);
+  syncPhysics();
+}
+
+// ---------- screens ----------
+function drawScreen(s, title, lines, bar) {
+  const x = s.ctx, w = s.canvas.width, h = s.canvas.height;
+  x.fillStyle = '#04110c'; x.fillRect(0, 0, w, h);
+  x.fillStyle = '#7fe8b0'; x.font = `600 ${Math.round(h * 0.13)}px JetBrains Mono, monospace`; x.textBaseline = 'top'; x.fillText(title, w * 0.05, h * 0.06);
+  lines.forEach((l, i) => { x.fillStyle = l[1] || '#e9f7ef'; x.font = `${i === 0 ? 700 : 500} ${Math.round(h * (i === 0 ? 0.24 : 0.12))}px JetBrains Mono, monospace`; x.fillText(l[0], w * 0.05, h * (i === 0 ? 0.24 : 0.5 + (i - 1) * 0.15)); });
+  if (bar) { x.fillStyle = '#183326'; x.fillRect(w * 0.05, h * 0.86, w * 0.9, h * 0.08); x.fillStyle = bar[1]; x.fillRect(w * 0.05, h * 0.86, w * 0.9 * Math.max(0, Math.min(1, bar[0])), h * 0.08); }
+  s.update();
+}
+const f1 = (n) => n.toFixed(1);
+function drawScreens() {
+  drawScreen(tw.cabScreen, 'FW-WT20', [[f1(wind.output) + ' kW'], [`wind ${f1(env.wind)} m/s`], [`${f1(wind.rpm)} rpm  pitch ${Math.round(wind.pitch)}°`]], [wind.output / wind.level.ratedKw, '#3fd27a']);
+  drawScreen(sa.invScreen, 'INVERTER', [[(solar.output).toFixed(2) + ' kW'], [`${Math.round(solar.poa || 0)} W/m²`], [`tilt ${Math.round(solar.tilt)}°  ${f1(solar.energyKwh)} kWh`]], [solar.output / solar.kWp(), '#ffd23f']);
+  drawScreen(pj.ctrlScreen, 'PUMP JACK', [[f1(pump.flowLpm) + ' L/min'], [`${f1(pump.spmNow)} strokes/min`], [pump.reason().slice(0, 22)]], [pump.spmNow / pump.level.spm, '#2fd6ff']);
+  drawScreen(pad.chScreen, 'CHARGER', [[Math.round(drone.battPct() * 100) + '%'], [drone.charging ? `charging ${drone.def.chargeKw} kW` : drone.state === 'charge' ? 'no grid power' : 'drone away'], [`tank ${f1(drone.liquidL)} L`]], [drone.battPct(), drone.battPct() < 0.3 ? '#ff5a48' : '#3fd27a']);
+  const F = grid.flows, socP = grid.soc / grid.level.batteryKwh;
+  drawScreen(bess.socScreen, 'BATTERY', [[Math.round(socP * 100) + '%'], [F.battIn > 0.05 ? `charging +${f1(F.battIn)} kW` : F.battOut > 0.05 ? `supplying -${f1(F.battOut)} kW` : 'standby'], [`${f1(grid.soc)} / ${grid.level.batteryKwh} kWh`]], [socP, '#3fd27a']);
+  const s = dp.flowScreen, x = s.ctx, w = s.canvas.width, h = s.canvas.height;
+  x.fillStyle = '#04110c'; x.fillRect(0, 0, w, h);
+  x.fillStyle = '#7fe8b0'; x.font = `600 ${Math.round(h * 0.09)}px JetBrains Mono, monospace`; x.textBaseline = 'top'; x.fillText('YARD POWER', w * 0.04, h * 0.04);
+  x.fillStyle = grid.status() === 'stopped' ? '#ff5a48' : grid.status() === 'waiting' ? '#ffae1a' : '#3fd27a'; x.fillText(grid.reason().slice(0, 30), w * 0.36, h * 0.04);
+  const rows = [['WIND', F.wind, '#3fd27a'], ['SOLAR', F.solar, '#ffd23f'], ['DIESEL', F.diesel, '#ff8a3a'], ['BATTERY', F.battOut - F.battIn, '#2fd6ff'], ['LOAD', -F.served, '#efe6d2'], ['EXPORT', -F.export, '#c58cff']];
+  rows.forEach(([k, v, c], i) => {
+    const y = h * (0.2 + i * 0.13); x.fillStyle = '#9fb8aa'; x.font = `500 ${Math.round(h * 0.085)}px JetBrains Mono, monospace`; x.fillText(k, w * 0.04, y);
+    x.fillStyle = '#183326'; x.fillRect(w * 0.27, y + h * 0.015, w * 0.5, h * 0.06);
+    x.fillStyle = c; const f = Math.min(1, Math.abs(v) / 20); x.fillRect(v >= 0 ? w * 0.52 : w * 0.52 - w * 0.25 * f, y + h * 0.015, w * 0.25 * f, h * 0.06);
+    x.fillStyle = '#e9f7ef'; x.fillText((v >= 0 ? '+' : '') + f1(v), w * 0.8, y);
+  });
+  s.update();
+}
+
+// ---------- UI ----------
+const KEYS = ['overview', 'wind', 'solar', 'tank', 'pump', 'drone', 'gen', 'grid', 'truck'];
+const NAMES = { overview: 'Whole yard', wind: 'Wind turbine', solar: 'Solar array', tank: 'Water tank', pump: 'Pump jack', drone: 'Spray drone', gen: 'Generator', grid: 'Power network', truck: 'Truck' };
+$('picker').innerHTML = KEYS.map((k) => `<button type="button" class="pick" id="pick-${k}" aria-pressed="${k === 'overview'}">${k === 'overview' ? '' : `<span class="dot" id="dot-${k}"></span>`}${NAMES[k]}</button>`).join('');
+const SIMS = { wind, solar, tank, pump, drone, gen: gsim, grid, truck: truckSim };
+const STC = { running: 'var(--ok)', waiting: 'var(--warn)', stopped: 'var(--bad)', off: 'var(--off)' };
+let toastT = 0;
+function toast(t) { const el = $('toast'); el.textContent = t; el.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => el.classList.remove('show'), 2800); }
+let selected = 'overview', tab = 'overview', inspecting = false;
+const TABS = ['overview', 'performance', 'resources', 'upgrades', 'operation'];
+const VIEWS = {
+  overview: { pos: [22, 19, 33], tgt: [-1, 3, -7] },
+  wind: { pos: [-6, 9, 4], tgt: [-20, 8.5, -14] },
+  solar: { pos: [-4.5, 4.2, 12.5], tgt: [-10.5, 1.2, 5] },
+  tank: { pos: [18.5, 5.2, 0.5], tgt: [12, 2.4, -7] },
+  pump: { pos: [16.5, 4.2, 6], tgt: [21, 1.9, -2] },
+  drone: { pos: [4, 8, 16], tgt: [14, 1.5, 8] },
+  gen: { pos: [8.5, 2.8, -4.5], tgt: [5.5, 0.9, -9.2] },
+  grid: { pos: [4.5, 5.2, -2.5], tgt: [-3, 1.4, -9] },
+  truck: null
+};
+const NOTES = {
+  overview: 'A working yard where everything is connected. The wind turbine and solar array feed the power network. The battery stores what is spare, the diesel set starts on its own when both run short, and anything left over is sold to the utility through the transmission line. The pump jack lifts well water into the tank, the drone refills from it, charges from the network and sprays the field lane by lane. Try a calm night: watch the battery drain, the diesel start, and the lights go out first if power runs short.',
+  wind: 'Power comes from the wind through the rotor: it rises with the cube of the wind speed until the rated output, then the blades pitch to hold it there. Below 3 m/s it waits, and in a storm above 24 m/s it feathers the blades and brakes. The nacelle turns to face the wind at 4 degrees a second.',
+  solar: 'Output follows the sun\'s angle on the modules, the light reaching them (weather), cell temperature and dust. Clean the panels when output drops. At level 3 the tracker tilts the table to follow the sun.',
+  tank: 'Water level rises with what the pump jack lifts and falls with the drone refills and the livestock trough. When the tank is full the pump waits. Each upgrade adds a 1.1 m steel ring.',
+  pump: 'The crank, pitman arms and walking beam move as a real four-bar linkage, so the horsehead lifts the rod straight up and down. Each stroke lifts the plunger\'s volume of water from 60 m down. It stops without power and waits when the tank is full.',
+  drone: 'The drone refills from the tank, charges on the pad from the power network, then flies the field lane by lane and returns when its tank is empty or its battery reaches the reserve. Sprayed plants turn green and dry out again over a few hours; when the field gets dry it starts a new mission.',
+  gen: 'The diesel set is the backup. The power network starts it when wind, sun and battery cannot cover the load, and stops it once there is spare power again. Fuel use follows the load.',
+  grid: 'Breakers switch each circuit. When supply is short the network sheds loads in order: yard lights first, then the drone charger, then the pump. The main breaker trips if the total load passes its rating. Surplus charges the battery and is then sold at $0.12 per kWh.',
+  truck: 'The truck rides on four independent raycast springs, with real mass, grip and braking. Load crates into the bed and they ride along, or tip out on sharp turns.'
+};
+let camAnim = null;
+function focus(key) {
+  let v = VIEWS[key];
+  if (key === 'drone') { const d = drone.pos; v = { pos: [d.x - 7, Math.max(5, d.y + 4.5), d.z + 9], tgt: [d.x, Math.max(0.6, d.y * 0.6), d.z] }; }
+  if (key === 'truck') { const p = chassis.position; const back = new V(0, 0, -1).applyQuaternion(tr.root.quaternion); v = { pos: [p.x + back.x * 9 + 4, 5, p.z + back.z * 9 + 4], tgt: [p.x, 1, p.z] }; }
+  if (!v) return;
+  camAnim = { t: 0, p0: camera.position.clone(), t0: controls.target.clone(), p1: new V(...v.pos), t1: new V(...v.tgt) };
+}
+function select(key, open) {
+  if (drive.on && key !== 'truck') setDriving(false);
+  selected = key;
+  KEYS.forEach((k) => $('pick-' + k).setAttribute('aria-pressed', String(k === key)));
+  focus(key);
+  outlines.select(key === 'overview' ? null : ROOT_OF[key]);
+  if (key === 'overview') openInspect(false); else if (open || inspecting) openInspect(true);
+  $('b-inspect').hidden = key === 'overview';
+  render(true);
+}
+function openInspect(on) { inspecting = on && selected !== 'overview'; $('sheet').hidden = !inspecting; $('stage').classList.toggle('inspecting', inspecting); requestAnimationFrame(resize); render(true); }
+KEYS.forEach((k) => { $('pick-' + k).onclick = () => select(k, false); });
+TABS.forEach((t) => { $('tab-' + t).onclick = () => { tab = t; TABS.forEach((u) => $('tab-' + u).setAttribute('aria-selected', String(u === t))); render(true); }; });
+$('close').onclick = () => openInspect(false);
+$('b-inspect').onclick = () => openInspect(!inspecting);
+function chipGroup(attr, set, current) {
+  const list = document.querySelectorAll(`[data-${attr}]`);
+  const mark = (v) => list.forEach((b) => b.setAttribute('aria-pressed', String(b.dataset[attr] === String(v))));
+  list.forEach((b) => { b.onclick = () => { set(b.dataset[attr]); mark(b.dataset[attr]); }; });
+  mark(current);
+  return mark;
+}
+const markHour = chipGroup('hour', (v) => { hour = +v; updateEnv(); toast(`Clock set to ${clockText()}`); }, '12.5');
+chipGroup('speed', (v) => { speed = +v; toast(speed === 1 ? 'Real time' : `Everything runs ${speed} times faster`); }, '1');
+chipGroup('wind', (v) => { windBase = +v; }, '6');
+chipGroup('weather', (v) => { weather = v; }, 'clear');
+$('flow').onclick = () => { clockRuns = !clockRuns; $('flow').setAttribute('aria-pressed', String(clockRuns)); };
+const dropAt = () => { const t = controls.target; return [t.x + (Math.random() - 0.5) * 2, 7, t.z + (Math.random() - 0.5) * 2]; };
+$('p-crate').onclick = () => { const [x, y, z] = dropAt(); addProp('crate', x, y, z, { spawned: true, ry: Math.random() * 3, w: [Math.random() * 2, Math.random() * 2, 0] }); };
+$('p-pumpkins').onclick = () => { for (let i = 0; i < 5; i++) { const [x, y, z] = dropAt(); addProp('pumpkin', x, y + i * 0.6, z, { spawned: true, seed: i + 20 }); } };
+$('p-barrel').onclick = () => { const t = controls.target, d = new V().subVectors(t, camera.position).setY(0).normalize(); addProp('barrel', t.x - d.x * 6, 0.32, t.z - d.z * 6, { spawned: true, rz: Math.PI / 2, rx: 0, ry: Math.atan2(d.x, d.z), v: [d.x * 6, 0, d.z * 6], color: '#d6402c' }); };
+function doAction(id) {
+  if (selected === 'overview') { if (id === 'mission') { const r = drone.act('mission', wallet); toast(r.msg); } return render(true); }
+  const s = SIMS[selected];
+  const res = s.act(id, wallet);
+  if (!res) return;
+  if (res.cost) wallet -= res.cost;
+  if (res.msg) toast(res.msg); render(true);
+}
+function clockText() { const h = Math.floor(hour), m = Math.floor((hour - h) * 60); return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`; }
+function genPanel() { return gsim.panel({ consumers: [{ name: 'Yard power network', kw: grid.flows.diesel }] }); }
+function panelFor(key) { return key === 'gen' ? genPanel() : SIMS[key].panel(); }
+function overviewPanel() {
+  const F = grid.flows, socP = grid.soc / grid.level.batteryKwh;
+  const order = ['grid', 'pump', 'drone', 'tank', 'wind', 'solar'];
+  const bad = order.map((k) => [k, SIMS[k].status()]).find(([, s]) => s === 'stopped');
+  return {
+    status: bad ? 'stopped' : grid.status(), reason: bad ? `${NAMES[bad[0]]}: ${SIMS[bad[0]].reason()}` : grid.reason(),
+    strip: [{ k: 'Generating', v: f1(F.renew + F.diesel) + ' kW' }, { k: 'Load', v: f1(F.served) + ' kW' }, { k: 'Battery', v: Math.round(socP * 100) + '%', f: socP, c: 'var(--ok)' }, { k: 'Water tank', v: Math.round(tank.frac() * 100) + '%', f: tank.frac(), c: 'var(--water)' }, { k: 'Field wet', v: Math.round(field.wetness() * 100) + '%', f: field.wetness(), c: 'var(--ok)' }, { k: 'Sold power', v: money(grid.earned) }],
+    actions: [{ id: 'mission', label: 'Send the drone out', disabled: drone.state !== 'done', primary: drone.state === 'done' }]
+  };
+}
+let lastActions = '';
+function render(force) {
+  const pd = selected === 'overview' ? overviewPanel() : panelFor(selected);
+  $('title').textContent = selected === 'overview' ? 'Power yard' : pd.title;
+  $('eyebrow').textContent = selected === 'overview' ? 'Fieldworks · power and water yard' : `Fieldworks · ${pd.sub.split(' · ')[1].toLowerCase()}`;
+  $('note').textContent = NOTES[selected];
+  $('st-dot').style.background = STC[pd.status]; $('st-text').textContent = pd.reason;
+  KEYS.slice(1).forEach((k) => { $('dot-' + k).style.background = STC[SIMS[k].status()]; });
+  $('wallet').textContent = money(wallet);
+  $('clock').textContent = `${clockText()} · ${f1(env.wind)} m/s · ${speed}x`;
+  $('strip').innerHTML = pd.strip.map((s) => `<div class="stat"><div class="k">${s.k}</div><div class="v">${s.v}</div>${s.f !== undefined ? `<div class="meter"><i style="width:${Math.max(0, Math.min(1, s.f)) * 100}%;${s.c ? 'background:' + s.c : ''}"></i></div>` : ''}</div>`).join('');
+  const aKey = JSON.stringify(pd.actions);
+  if (force || aKey !== lastActions) {
+    lastActions = aKey;
+    $('actions').innerHTML = pd.actions.map((a) => `<button type="button" class="btn${a.primary ? ' primary' : ''}" data-act="${a.id}"${a.disabled ? ' disabled' : ''}>${a.label}</button>`).join('');
+    $('actions').querySelectorAll('button').forEach((b) => { b.onclick = () => doAction(b.dataset.act); });
+  }
+  $('b-inspect').textContent = inspecting ? 'Hide details' : 'Inspect';
+  if (!inspecting) return;
+  $('i-name').textContent = pd.title;
+  $('i-sub').innerHTML = `${pd.sub} · <span class="pill" style="color:${STC[pd.status]}">${pd.status}</span>`;
+  const t = pd.tabs[tab], rows = (r) => `<dl>${r.map(([k, v]) => `<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>`;
+  let h = '';
+  if (tab === 'upgrades') h = rows(t.rows) + `<div class="log">${t.gains.map((g) => '<div>' + g + '</div>').join('')}</div>`;
+  else if (tab === 'operation') h = rows(t.rows) + `<div class="log">${t.log.map((l) => `<div>${l.t.toFixed(0).padStart(5, ' ')}s  ${l.text}</div>`).join('') || '<div>No events yet</div>'}</div>`;
+  else h = rows(t);
+  $('tab-body').innerHTML = h;
+}
+
+// tap: push a prop, or select a machine
+const down = { x: 0, y: 0 };
+const ray = new THREE.Raycaster();
+const ndc = (e) => { const rc = renderer.domElement.getBoundingClientRect(); return new THREE.Vector2(((e.clientX - rc.left) / rc.width) * 2 - 1, -((e.clientY - rc.top) / rc.height) * 2 + 1); };
+renderer.domElement.addEventListener('pointerdown', (e) => { down.x = e.clientX; down.y = e.clientY; camAnim = null; });
+renderer.domElement.addEventListener('pointerup', (e) => {
+  if (Math.hypot(e.clientX - down.x, e.clientY - down.y) > 6) return;
+  camera.updateMatrixWorld(); ray.setFromCamera(ndc(e), camera);
+  const hits = ray.intersectObjects([...props.map((p) => p.mesh), ...KEY_OF.keys()], true);
+  for (const h of hits) {
+    let o = h.object; while (o && !o.userData.prop && !KEY_OF.has(o)) o = o.parent;
+    if (!o) continue;
+    if (o.userData.prop) {
+      const b = o.userData.prop.body, d = ray.ray.direction;
+      b.wakeUp(); b.applyImpulse(new CANNON.Vec3(d.x * b.mass * 4.5, b.mass * 2.2, d.z * b.mass * 4.5), new CANNON.Vec3(h.point.x - b.position.x, h.point.y - b.position.y, h.point.z - b.position.z));
+      return;
+    }
+    tab = 'overview'; TABS.forEach((u) => $('tab-' + u).setAttribute('aria-selected', String(u === 'overview')));
+    select(KEY_OF.get(o), true); return;
+  }
+});
+renderer.domElement.addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') outlines.hover(outlines.pick({ pointer: ndc(e), reach: 120 })); });
+function resize() { const w = host.clientWidth, h = host.clientHeight; camera.aspect = w / Math.max(1, h); camera.updateProjectionMatrix(); gfx.resize(w, h); outlines.resize(); }
+new ResizeObserver(resize).observe(host);
+
+// ---------- lighting by time of day and weather ----------
+const C3 = (h) => lin(h);
+const SKY = { dayT: C3('#4d8ed8'), dayH: C3('#c4e2f3'), setT: C3('#46679f'), setH: C3('#f3a35a'), nightT: C3('#070d1a'), nightH: C3('#16223a'), grey: C3('#8f9aa3') };
+const tmpC = new THREE.Color(), tmpC2 = new THREE.Color();
+function dimReflections(day) {
+  // the reflection environment is a fixed bright room, so scale it with daylight or nights glow
+  if (!envMats) { envMats = new Set(); scene.traverse((o) => { if (o.isMesh && o.material && o.material.isMeshStandardMaterial) envMats.add(o.material); }); }
+  if (Math.abs(day - lastDay) < 0.02) return; lastDay = day;
+  envMats.forEach((m) => { m.envMapIntensity = 0.08 + 0.92 * day; });
+}
+const NIGHT_GRADE = { exposure: 0.78, contrast: 1.08, saturation: 0.62, temp: -0.14, tint: 0, lift: [0, 0.004, 0.016], gain: [0.88, 0.96, 1.1] };
+let gradeMode = 'farm';
+function applyLighting() {
+  const e = env.sunDir.y, wf = weather === 'clear' ? 0 : weather === 'cloudy' ? 0.55 : 0.75;
+  const day = THREE.MathUtils.smoothstep(e, -0.08, 0.3), sunset = Math.max(0, 1 - Math.abs(e - 0.04) / 0.18);
+  tmpC.copy(SKY.nightT).lerp(SKY.dayT, day).lerp(SKY.setT, sunset * 0.5); tmpC.lerp(SKY.grey.clone().multiplyScalar(0.25 + day * 0.75), wf);
+  tmpC2.copy(SKY.nightH).lerp(SKY.dayH, day).lerp(SKY.setH, sunset * 0.8); tmpC2.lerp(SKY.grey.clone().multiplyScalar(0.3 + day * 0.85), wf);
+  skyU.top.value.copy(tmpC); skyU.horizon.value.copy(tmpC2); skyU.bottom.value.copy(tmpC2).multiplyScalar(0.7);
+  skyU.sunDir.value.copy(env.sunDir); skyU.sunCol.value.setRGB(1, 0.85 - sunset * 0.3, 0.6 - sunset * 0.35).multiplyScalar((1 - wf) * (e > -0.02 ? 1 : 0));
+  scene.fog.color.copy(tmpC2);
+  const up = e > -0.02;
+  const dir = up ? env.sunDir : new V(-env.sunDir.x, -env.sunDir.y, -env.sunDir.z * 0.5).normalize();
+  sun.position.copy(sun.target.position).addScaledVector(dir, 90);
+  sun.intensity = up ? 2.35 * THREE.MathUtils.smoothstep(e, -0.02, 0.18) * (1 - wf * 0.75) : 0.22;
+  sun.color.setRGB(1, up ? 0.92 - sunset * 0.35 : 0.8, up ? 0.8 - sunset * 0.45 : 1).multiplyScalar(up ? 1 : 0.6);
+  hemi.intensity = 0.1 + 0.6 * day; dimReflections(day);
+  const mode = e < -0.04 ? 'night' : e < 0.12 ? 'dusk' : 'farm';
+  if (mode !== gradeMode) { gradeMode = mode; gfx.setGrade(mode === 'night' ? NIGHT_GRADE : GRADES[mode], 2.5); } hemi.color.copy(tmpC2).lerp(new THREE.Color(1, 1, 1), 0.4);
+  const lit = grid.powered.lights && env.dark;
+  lamps.forEach((l) => { l.light.intensity = lit ? 2.2 : 0; l.lens.material.emissiveIntensity = lit ? 7 : 0; });
+  tr.headlights.forEach((m) => { m.material.emissiveIntensity = drive.on && env.sunDir.y < 0.15 ? 8 : 0; });
+  cloudMat.color.setRGB(1, 1, 1).multiplyScalar((0.35 + 0.65 * day) * (weather === 'rain' ? 0.6 : 1));
+  clouds.forEach((c, i) => { c.visible = i < (weather === 'clear' ? 4 : 12); });
+  rain.visible = weather === 'rain';
+}
+
+// ---------- loop ----------
+let paintT = 0, screenT = 0, uiT = 0, aviT = 0;
+function frame(dt) {
+  const simDt = dt * speed, n = Math.max(1, Math.ceil(simDt / 0.1));
+  for (let i = 0; i < n; i++) simStep(simDt / n);
+  physicsStep(dt);
+  tw.animate(dt, wind, env); sa.animate(dt, solar); tk.animate(dt, tank); pj.animate(dt, pump); dr.animate(dt, drone);
+  gen.animate(dt * Math.min(speed, 4), gsim, { reason: gsim.reason() });
+  fx.update(dt, dr, drone);
+  bess.fans.forEach((f) => { f.rotation.z += dt * (grid.flows.battIn + grid.flows.battOut > 0.1 ? 14 : 3); });
+  Object.entries(dp.breakers).forEach(([k, b]) => {
+    const on = k === 'main' ? !grid.mainTripped : grid.breakers[k];
+    b.handle.rotation.x += ((on ? -0.45 : 0.45) - b.handle.rotation.x) * Math.min(1, dt * 10);
+    gBrk[k].setState(k === 'main' ? (grid.mainTripped ? 'stopped' : 'running') : !grid.breakers[k] ? 'off' : grid.powered[k] ? 'running' : 'waiting');
+  });
+  // status lights
+  gW.setState(wind.status()); gS.setState(solar.status());
+  aviT += dt; gAv.setState(Math.floor(aviT * 1.2) % 2 ? 'stopped' : 'off');
+  gT.setState(tank.status() === 'stopped' ? 'stopped' : tank.inLpm + tank.outLpm > 0.1 ? 'flow' : 'waiting');
+  gP.setState(pump.status()); gC.setState(drone.charging ? 'flow' : !grid.powered.charger ? 'stopped' : drone.state === 'charge' ? 'waiting' : 'running');
+  gB.setState(grid.flows.battIn + grid.flows.battOut > 0.05 ? 'flow' : grid.soc / grid.level.batteryKwh < 0.15 ? 'waiting' : 'running');
+  gG.setState(gsim.status());
+  trough.water.scale.y = 1; trough.water.visible = tank.valveOpen && tank.volumeL > 10;
+  paintT -= dt; if (paintT <= 0) { paintT = 0.4; field.paint(); }
+  screenT -= dt; if (screenT <= 0) { screenT = 0.5; drawScreens(); }
+  clouds.forEach((c) => { c.position.x += c.userData.v * dt * (0.5 + env.wind * 0.15); if (c.position.x > 160) c.position.x = -160; });
+  if (rain.visible) { const p = rainG.attributes.position, t = controls.target; for (let i = 0; i < rainN; i++) { let y = p.getY(i) - dt * 14; if (y < 0) y += 30; p.setY(i, y); } rain.position.set(t.x, 0, t.z); p.needsUpdate = true; }
+  applyLighting();
+}
+window.__fw = { tr, camera, controls, wind, solar, tank, pump, drone, grid, gsim, field, props, chassis, vehicle, select, openInspect, frame, render, setTab: (t) => $('tab-' + t).click(), doAction, setHour: (h) => { hour = h; updateEnv(); }, setWind: (w) => { windBase = w; }, setWeather: (w) => { weather = w; }, setSpeed: (s) => { speed = s; }, step: (secs, sp) => { const s0 = speed; speed = sp || 1; for (let i = 0; i < secs * 30; i++) frame(1 / 30); speed = s0; }, drive, setDriving, gfx };
+const clock = new THREE.Clock();
+function loop() {
+  const dt = Math.min(clock.getDelta(), 0.05);
+  frame(dt);
+  if (drive.on) {
+    const p = chassis.position, back = new V(0, 0, -1).applyQuaternion(tr.root.quaternion).setY(0).normalize();
+    const want = new V(p.x + back.x * 8.5, p.y + 3.6, p.z + back.z * 8.5);
+    camera.position.lerp(want, Math.min(1, dt * 3)); controls.target.lerp(new V(p.x, p.y + 1, p.z), Math.min(1, dt * 6)); camera.lookAt(controls.target);
+  } else if (camAnim) {
+    camAnim.t = Math.min(1, camAnim.t + dt / 1.1); const e = camAnim.t * camAnim.t * (3 - 2 * camAnim.t);
+    camera.position.lerpVectors(camAnim.p0, camAnim.p1, e); controls.target.lerpVectors(camAnim.t0, camAnim.t1, e);
+    if (camAnim.t >= 1) camAnim = null;
+  }
+  glow.update(dt, camera); outlines.update(dt); if (!drive.on) controls.update();
+  uiT -= dt; if (uiT <= 0) { uiT = 0.25; render(false); }
+  gfx.render(dt);
+  requestAnimationFrame(loop);
+}
+updateEnv(); applyLighting();
+camera.position.set(...VIEWS.overview.pos); controls.target.set(...VIEWS.overview.tgt); controls.update();
+$('b-inspect').hidden = true; $('note').textContent = NOTES.overview;
+syncPhysics(); drawScreens(); resize(); render(true); loop();
+</script>
