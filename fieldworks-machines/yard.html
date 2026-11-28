@@ -228,6 +228,21 @@ const $ = (id) => document.getElementById(id);
 const V = THREE.Vector3;
 const lin = (h) => new THREE.Color(h).convertSRGBToLinear();
 const qs = new URLSearchParams(location.search);
+// ---------- crop market: every crop's price drifts through the day around its base value (x0.6 to x1.7), each with
+// its own trend that turns now and then, so what to sow next is a real choice. A harvest is valued at today's price.
+const MARKET = { m: {}, t: {}, acc: 0, seed: 7 };
+function marketRand() { MARKET.seed = (MARKET.seed * 16807) % 2147483647; return MARKET.seed / 2147483647; }
+function marketTick(dt) {
+  MARKET.acc += dt; if (MARKET.acc < 600) return; MARKET.acc -= 600;   // every 10 game minutes
+  Object.keys(CROPS).forEach((c) => {
+    if (MARKET.m[c] === undefined) { MARKET.m[c] = 0.8 + marketRand() * 0.5; MARKET.t[c] = (marketRand() - 0.5) * 0.04; }
+    if (marketRand() < 0.06) MARKET.t[c] = (marketRand() - 0.5) * 0.05;          // the trend turns
+    MARKET.t[c] += (1 - MARKET.m[c]) * 0.004;                                     // and is pulled back toward the base price
+    MARKET.m[c] = Math.max(0.6, Math.min(1.7, MARKET.m[c] + MARKET.t[c] + (marketRand() - 0.5) * 0.02));
+  });
+}
+const price = (c) => { if (MARKET.m[c] === undefined) { MARKET.acc = 600; marketTick(0); } return CROPS[c].value * MARKET.m[c]; };
+const trendArrow = (c) => (MARKET.t[c] > 0.006 ? '▲' : MARKET.t[c] < -0.006 ? '▼' : '–');
 // Basic farming first: field, crops, tractor and implements, trailer, truck, water, the packing line that sells the
 // harvest and the power that runs them. The advanced tools (parts factory, bakery chain, production core, workshop,
 // digester, soil steward, controller) stay in the game, switched off, until the player turns them on.
@@ -800,10 +815,10 @@ function loads() {
 let refillLpm = 0, autoMissionT = 0;
 const TRACTOR_CB = {
   attach: (n) => attachImpl(n), detach: (n) => detachImpl(n),
-  unload: (n) => { const room = Math.max(0, 200 - lineSim.bin.length), k = Math.min(n, room); if (k) lineSim.addToBin(fieldSim.crop, k, CROPS[fieldSim.crop].value, fieldSim.takeGrades(k)); return k; }
+  unload: (n) => { const room = Math.max(0, 200 - lineSim.bin.length), k = Math.min(n, room); if (k) lineSim.addToBin(fieldSim.crop, k, price(fieldSim.crop), fieldSim.takeGrades(k)); return k; }
 };
 function simStep(dt) {
-  gameT += dt; if (clockRuns) hour = (hour + dt / 3600) % 24;
+  gameT += dt; if (clockRuns) hour = (hour + dt / 3600) % 24; marketTick(dt);
   updateEnv();
   wind.tick(dt, env); solar.tick(dt, env);
   logic.powered = grid.powered.line; logic.tick(dt);
@@ -1021,7 +1036,7 @@ const KEYS = ['overview', 'network', 'parts', 'core', 'workshop', 'field', 'stew
 const NAMES = { overview: 'Whole yard', wind: 'Wind turbine', solar: 'Solar array', tank: 'Water tank', pump: 'Pump jack', drone: 'Spray drone', gen: 'Generator', grid: 'Power network', truck: 'Truck', field: 'Crop field', line: 'Processing line', tractor: 'Tractor', chain: 'Bakery chain', digester: 'Digester', steward: 'Soil steward', logic: 'Controller', network: 'Diagnostics', workshop: 'Workshop', core: 'Production core', parts: 'Power and belts' };
 $('picker').innerHTML = KEYS.map((k) => `<button type="button" class="pick" id="pick-${k}" aria-pressed="${k === 'overview'}">${k === 'overview' ? '' : `<span class="dot" id="dot-${k}"></span>`}${NAMES[k]}</button>`).join('');
 fieldSim.act = (id, w) => {
-  if (id === 'harvest') { const c = fieldSim.crop, n = fieldSim.harvest(); if (!n) return { msg: 'Nothing is ready yet' }; lineSim.addToBin(c, n, CROPS[c].value, fieldSim.takeGrades(n)); return { msg: `Hand-harvested ${n} ${CROPS[c].name.toLowerCase()} into the line's hopper` }; }
+  if (id === 'harvest') { const c = fieldSim.crop, n = fieldSim.harvest(); if (!n) return { msg: 'Nothing is ready yet' }; lineSim.addToBin(c, n, price(c), fieldSim.takeGrades(n)); return { msg: `Hand-harvested ${n} ${CROPS[c].name.toLowerCase()} into the line's hopper` }; }
   if (id === 'replant') { const n = fieldSim.plants.filter((p) => p.state !== 'growing').length; if (!n) return { msg: 'Every row is already planted' }; const c = Math.ceil(n * fieldSim.seedCost * 10); if (c > w) return { msg: `Seed and labour cost ${money(c)}` }; fieldSim.replant(); return { cost: c, msg: `Replanted by hand for ${money(c)}` }; }
   if (id === 'auto') { fieldSim.autoFarm = !fieldSim.autoFarm; return { msg: `Auto farming ${fieldSim.autoFarm ? 'on: the tractor plows, sows and harvests' : 'off'}` }; }
   if (id.startsWith('crop-')) { fieldSim.setCrop(id.slice(5)); return { msg: `${CROPS[fieldSim.next].name} will be sown after the next plowing` }; }
@@ -1904,6 +1919,7 @@ const SAVE_KEY = 'fw.yard.save.v1', SIMLIST = () => ({ wind, solar, tank, pump, 
 function snapshot() {
   const lv = {}, cond = {}; Object.entries(SIMLIST()).forEach(([k, sm]) => { lv[k] = sm.levelIndex; cond[k] = +sm.condition.toFixed(2); });
   return { v: 1, t: Date.now(), wallet: Math.round(wallet * 100) / 100, hour, lv, cond, genL: gsim.levelIndex, genFuel: gsim.fuel, tankL: tank.volumeL, soc: grid.soc, gridEarned: grid.earned,
+    market: { m: MARKET.m, t: MARKET.t, acc: MARKET.acc, seed: MARKET.seed },
     field: { crop: fieldSim.crop, next: fieldSim.next, auto: fieldSim.autoFarm, harvested: fieldSim.harvested, p: fieldSim.plants.map((p) => [Math.round(p.g * 1000) / 1000, p.state[0], Math.round(p.wet * 100) / 100, Math.round(p.n * 1000) / 1000, Math.round(p.comp * 1000) / 1000, Math.round(p.org * 1000) / 1000]), lastCrop: fieldSim.lastCrop, mono: fieldSim.mono },
     line: { earned: lineSim.earned, sold: lineSim.sold, bin: lineSim.bin.length }, chainS: { earned: chain.earned, sold: chain.sold, made: chain.made }, tractorFuel: tractorSim.fuel,
     tech: { dig: { massKg: digester.massKg, gasM3: digester.gasM3, tempC: digester.tempC, digestateL: digester.digestateL, mode: digester.mode, queue: digester.queue.slice(0, 40) },
@@ -1924,6 +1940,7 @@ function applySave(s) {
   Object.entries(SIMLIST()).forEach(([k, sm]) => { if (s.lv[k] !== undefined) sm.levelIndex = Math.max(0, Math.min(sm.def.levels.length - 1, s.lv[k] | 0)); if (s.cond[k] !== undefined) sm.condition = Math.max(0, Math.min(100, s.cond[k])); });
   gsim.levelIndex = Math.max(0, Math.min(2, s.genL | 0)); gsim.fuel = s.genFuel; tank.volumeL = Math.min(tank.cap(), s.tankL); grid.soc = Math.min(grid.level.batteryKwh, s.soc); grid.earned = s.gridEarned || 0;
   const st = { g: 'growing', s: 'stubble', t: 'tilled' };
+  if (s.market && s.market.m) Object.assign(MARKET, { m: s.market.m, t: s.market.t || {}, acc: +s.market.acc || 0, seed: s.market.seed || 7 });
   fieldSim.crop = s.field.crop; fieldSim.next = s.field.next; fieldSim.autoFarm = s.field.auto; fieldSim.harvested = s.field.harvested; fieldSim.applyDensity();
   fieldSim.plants.forEach((p, i) => { const r = s.field.p[i]; p.g = r[0]; p.state = st[r[1]] || 'growing'; p.wet = r[2]; if (r.length >= 6) { p.n = r[3]; p.comp = r[4]; p.org = r[5]; } });
   fieldSim.lastCrop = s.field.lastCrop || null; fieldSim.mono = !!s.field.mono;
@@ -1986,16 +2003,23 @@ else { placeBuilding('barn', -16, 12, Math.PI / 2); wsRefreshDraft(); }
   let last = '';
   function draw(force) {
     const T = tractorSim, F = fieldSim, C = CROPS[F.next], busy = T.state !== 'parked';
-    let step, msg, sub, bar = null; const acts = [];
+    let step, msg, sub, bar = null, market = false; const acts = [];
     const fastBtn = (go) => acts.push(['fast', speed >= 60 ? 'Normal speed' : 'Fast-forward', go]);
     if (busy) {
       step = T.job === 'plow' ? 0 : T.job === 'seed' ? 1 : T.job === 'harvest' ? 3 : 2;
       msg = { plow: 'Plowing the field', seed: `Sowing ${C.name.toLowerCase()}`, harvest: 'Harvesting' }[T.job] || 'The tractor is out';
       sub = T.reason(); bar = T.job === 'plow' ? F.tilled() : T.job === 'seed' ? 1 - F.tilled() : T.job === 'harvest' ? 1 - F.ripe() : null;
       fastBtn(false);
-    } else if (F.ripe() > 0.9) { step = 3; msg = `${CROPS[F.crop].name} is ready`; sub = 'Bring it in with the harvester. The trailer takes it to the packing line.'; acts.push(['harvest', 'Harvest', true]); }
+    } else if (F.ripe() > 0.9) { step = 3; msg = `${CROPS[F.crop].name} is ready`; sub = `Sells for $${price(F.crop).toFixed(2)} ${trendArrow(F.crop)} today. The trailer takes it to the packing line.`; acts.push(['harvest', 'Harvest', true]); }
     else if (F.stubble() > 0.5) { step = 0; msg = 'Plow the stubble'; sub = 'Turn the old crop into the soil before sowing again.'; acts.push(['plow', 'Plow', true]); }
-    else if (F.tilled() > 0.5) { step = 1; msg = `Sow ${C.name.toLowerCase()}`; sub = `${C.growHours} h to grow, about $${C.value.toFixed(2)} a unit.`; acts.push(['seed', 'Sow', true], ['crop', 'Change crop', false]); }
+    else if (F.tilled() > 0.5) {
+      step = 1; msg = `Sow ${C.name.toLowerCase()}`;
+      const best = Object.keys(CROPS).sort((a, b) => price(b) / CROPS[b].growHours - price(a) / CROPS[a].growHours)[0];
+      sub = `${C.growHours} h to grow, sells for $${price(F.next).toFixed(2)} ${trendArrow(F.next)} today.`;
+      acts.push(['seed', 'Sow', true], ['crop', 'Change crop', false]);
+      if (best !== F.next) acts.push(['best', `Best now: ${CROPS[best].name}`, false]);
+      market = true;
+    }
     else if (lineSim.bin.length + lineSim.items.length > 0 && F.growth() < 0.25) { step = 4; msg = 'Selling the harvest'; sub = `The packing line washes, sorts and boxes it. Sold so far: ${money(lineSim.earned)}.`; fastBtn(false); }
     else {
       step = 2; const g = F.growth(), w = F.wetness();
@@ -2005,10 +2029,11 @@ else { placeBuilding('barn', -16, 12, Math.PI / 2); wsRefreshDraft(); }
       fastBtn(w >= 0.35);
     }
     acts.push(['auto', `Auto farming: ${F.autoFarm ? 'on' : 'off'}`, false]);
-    const key = [step, msg, sub, bar === null ? '' : Math.round(bar * 50), acts.map((a) => a[1]).join()].join('|');
+    const mk = market ? Object.keys(CROPS).sort((a, b) => price(b) - price(a)).slice(0, 4).map((c) => `${CROPS[c].name} $${price(c).toFixed(2)} ${trendArrow(c)}`).join(' · ') : '';
+    const key = [step, msg, sub, mk, bar === null ? '' : Math.round(bar * 50), acts.map((a) => a[1]).join()].join('|');
     if (!force && key === last) return; last = key;
     $('g-steps').innerHTML = STEPS.map((t, i) => `<span class="${i === step ? 'now' : i < step ? 'done' : ''}">${t}</span>`).join('');
-    $('g-msg').textContent = msg; $('g-sub').textContent = sub;
+    $('g-msg').textContent = msg; $('g-sub').textContent = sub + (mk ? `\nTop prices: ${mk}` : ''); $('g-sub').style.whiteSpace = 'pre-line';
     $('g-barw').hidden = bar === null; if (bar !== null) $('g-bar').style.width = Math.round(Math.max(0, Math.min(1, bar)) * 100) + '%';
     $('g-acts').innerHTML = acts.map(([id, t, go]) => `<button type="button" data-g="${id}" class="${go ? 'go' : ''}">${t}</button>`).join('');
   }
@@ -2016,6 +2041,7 @@ else { placeBuilding('barn', -16, 12, Math.PI / 2); wsRefreshDraft(); }
     const b = e.target.closest('[data-g]'); if (!b) return; const id = b.dataset.g;
     if (id === 'plow' || id === 'seed' || id === 'harvest') job(id);
     else if (id === 'crop') cropCycle();
+    else if (id === 'best') { fieldSim.next = Object.keys(CROPS).sort((a, b) => price(b) / CROPS[b].growHours - price(a) / CROPS[a].growHours)[0]; toast(`Next crop: ${CROPS[fieldSim.next].name}, the best price per hour of growing right now`); draw(true); }
     else if (id === 'fast') fast();
     else if (id === 'water') { drone.newMission(); toast('The drone takes off to water the field'); }
     else if (id === 'auto') { fieldSim.autoFarm = !fieldSim.autoFarm; toast(fieldSim.autoFarm ? 'Auto farming on: the tractor starts each job when the field is ready' : 'Auto farming off: you start each job'); draw(true); }
@@ -2122,7 +2148,7 @@ function animateInteract(dt) {
     if (k >= 1) { P.root.scale.setScalar(P.s0); scene.remove(P.ring); P.ring.geometry.dispose(); P.ring.material.dispose(); POPS.splice(i, 1); }
   }
 }
-window.__fw = { twm: tw, ray, MODELS, partModels, popIn, pickUpPart, pickUpBuilding, showHint, hoverInfo, pgrid, PW, startPart, placePart, partsSim, canPlacePart, core, CR, coreMods, rebuildCoreMods, rt, custom, DS, bay, wsRebuildBuilt, wsRefreshDraft, ws: () => ({ wsBuilt, wsDraft, wsLink }), digester, steward, logic, rov, stw, dgm, lc, diagnose, setSoil: (m) => document.querySelector(`[data-soil="${m}"]`).click(), tractorSim, chain, placed, startBuild, moveGhost, confirmBuild, BUILD, save, readSave, IMPL, trac, runAudit, net, MODELS, lineSim, fieldSim, buildFieldMeshes, tr, camera, controls, wind, solar, tank, pump, drone, grid, gsim, field, props, chassis, vehicle, select, openInspect, frame, render, setTab: (t) => $('tab-' + t).click(), doAction, setHour: (h) => { hour = h; updateEnv(); }, setWind: (w) => { windBase = w; }, setWeather: (w) => { weather = w; }, setSpeed: (s) => { speed = s; }, step: (secs, sp) => { const s0 = speed; speed = sp || 1; for (let i = 0; i < secs * 30; i++) frame(1 / 30); speed = s0; }, drive, setDriving, gfx };
+window.__fw = { MARKET, price, twm: tw, ray, MODELS, partModels, popIn, pickUpPart, pickUpBuilding, showHint, hoverInfo, pgrid, PW, startPart, placePart, partsSim, canPlacePart, core, CR, coreMods, rebuildCoreMods, rt, custom, DS, bay, wsRebuildBuilt, wsRefreshDraft, ws: () => ({ wsBuilt, wsDraft, wsLink }), digester, steward, logic, rov, stw, dgm, lc, diagnose, setSoil: (m) => document.querySelector(`[data-soil="${m}"]`).click(), tractorSim, chain, placed, startBuild, moveGhost, confirmBuild, BUILD, save, readSave, IMPL, trac, runAudit, net, MODELS, lineSim, fieldSim, buildFieldMeshes, tr, camera, controls, wind, solar, tank, pump, drone, grid, gsim, field, props, chassis, vehicle, select, openInspect, frame, render, setTab: (t) => $('tab-' + t).click(), doAction, setHour: (h) => { hour = h; updateEnv(); }, setWind: (w) => { windBase = w; }, setWeather: (w) => { weather = w; }, setSpeed: (s) => { speed = s; }, step: (secs, sp) => { const s0 = speed; speed = sp || 1; for (let i = 0; i < secs * 30; i++) frame(1 / 30); speed = s0; }, drive, setDriving, gfx };
 const clock = new THREE.Clock();
 function loop() {
   const dt = Math.min(clock.getDelta(), 0.05);
