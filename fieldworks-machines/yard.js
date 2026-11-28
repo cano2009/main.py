@@ -380,6 +380,7 @@ export function pumpJack() {
   }
   return {
     root, ctrlScreen, control: ctrl, wellOutlet: new V(-A, 0.6, 0.4), terminal: new V(3.9, 0.2, 1.0),
+    moving: { beam, keep: [motor, sheave, ...cranks.map((c) => c.g), ...pitmans, ...bridle, carrier, rod, ctrl] },   // for the Blender body
     rodY: () => PS.y - 1.3 - A * phi,
     animate(dt, sim) {
       const r = sim.level.strokeM * Bk / (2 * A), theta = -sim.crank;

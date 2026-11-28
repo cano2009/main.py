@@ -1439,7 +1439,7 @@ function applyLighting() {
 // ---------- processing line visuals ----------
 const itemMeshes = new Map(), binPile = [];
 const itemGeo = (kind, dirty) => HD.item(kind, dirty) || LP.item(kind, dirty), itemMat = (kind) => (HD.item(kind, false) ? HD.material() : LP.material());
-const gWsh = glow.attach(wsh.root, { state: 'running' }); gWsh.led({ position: wsh.ledAt, size: 0.03 });
+const gWsh = glow.attach(wsh.root, { state: 'running' });   // the Hydro-Wash model carries its own stack light
 const gCut = glow.attach(cut.root, { state: 'running' }); gCut.stackLight({ position: new V(0.15, 1.96, -0.6), radius: 0.035, segment: 0.07 });
 const gPak = glow.attach(pak.root, { state: 'running' }); gPak.stackLight({ position: pak.ledAt, radius: 0.035, segment: 0.07 });
 for (let i = 0; i < 8; i++) { const m = new THREE.Mesh(itemGeo('radish', true), itemMat('radish')); m.castShadow = true; m.position.set(LX0 + 0.75 + ((i % 3) - 1) * 0.22, 1.02, LZ + (Math.floor(i / 3) - 1) * 0.22); m.rotation.y = i * 1.3; m.visible = false; scene.add(m); binPile.push(m); }
@@ -1454,6 +1454,7 @@ MD.swap(wsh.root, 'models/hydrowash.glb').then((r) => { if (r) { washParts = r.p
 // power yard (mid-poly Blender models): the game keeps its screens, labels, LEDs, sockets, the battery fans, the breaker
 // handles and the tracker drive; the solar table node goes into the game's table group so it still tilts
 MD.swap(xf.root, 'models/py_transformer.glb');
+MD.swap(pj.root, 'models/fy_pumpjack.glb', { attach: { beam: pj.moving.beam }, keep: (m) => under(m, pj.moving.keep) });   // the linkage stays the game's and keeps pumping
 MD.swap(bess.root, 'models/py_bess.glb', { keep: (m) => under(m, bess.fans) });
 MD.swap(dp.root, 'models/py_panel.glb', { keep: (m) => under(m, Object.values(dp.breakers).map((b) => b.handle)) });
 MD.swap(sa.root, 'models/py_solar.glb', { attach: { table: sa.table }, keep: (m) => under(m, [sa.drive]) });
