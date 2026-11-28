@@ -224,7 +224,6 @@ def wind_turbine():
             for k in range(5): block((0.08, 0.14, 0.06), (sx * 0.56, -0.45 + k * 0.22, TOP + 0.02), '#9aa2a8', 0.012)
         block((0.5, 0.56, 0.03), (0, 0.45, TOP + 0.01), '#e3e7ea', 0.012); block((0.06, 0.06, 0.04), (0.2, 0.2, TOP + 0.04), 'dark', 0.008)
         block((0.42, 0.34, 0.26), (-0.32, 1.72, TOP + 0.13), '#c9cfd3', 0.03)
-        for k in range(5): block((0.36, 0.02, 0.2), (-0.32, 1.56 + k * 0.08, TOP + 0.14), '#8d969c', 0.003) if False else None
         cyl(0.11, 0.03, (-0.32, 1.72, TOP + 0.275), '#3b4045', verts=16, bevel=0.005)
         for (mx, my) in ((-0.42, 0.95), (0.3, 1.25)):
             block((0.18, 0.18, 0.04), (mx, my, TOP + 0.02), 'steelD', 0.01)
@@ -239,7 +238,8 @@ def wind_turbine():
         for k in range(16): block((XW * 2 - 0.04, 0.012, 0.012), (0, Y0 + 0.05 + k * 0.1, DZ + 0.04), '#d98a22', 0.0)
         for sx in (-1, 1):
             block((0.08, Y1 - Y0, 0.1), (sx * (XW - 0.04), (Y0 + Y1) / 2, DZ - 0.08), RED, 0.012)
-            strut((sx * (XW - 0.05), 2.72, ZC + 0.2), (sx * (XW - 0.05), Y1 - 0.1, DZ - 0.1), 0.06, RED)           # diagonal brace to the body
+            strut((sx * (wid(2.3) / 2 - 0.02), 2.3, ZC + 0.15), (sx * (XW - 0.05), Y1 - 0.1, DZ - 0.1), 0.06, RED)   # diagonal brace, landing on the body's side
+            block((0.05, 0.14, 0.14), (sx * (wid(2.3) / 2 + 0.005), 2.3, ZC + 0.15), RED, 0.01)                         # its bolted foot
         block((XW * 2, 0.08, 0.1), (0, Y1 - 0.04, DZ - 0.08), RED, 0.012)
         RH = 0.55
         def rail(a, b):

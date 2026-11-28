@@ -117,8 +117,16 @@ const GROW = {
     if (st === 5) [[0.1, 0.03], [-0.07, -0.08], [0.02, 0.1]].forEach(([x, z]) => sphere(k, 0.04, '#8a5a2a', '#d6a467', M(x, 0.01, z, 0, x * 9, 0, 1.3, 0.8, 1)));
   },
   pumpkin(k, st, f) {
-    for (let i = 0; i < 2 + st; i++) { const az = i / (2 + st) * 6.28, d = 0.18 * f; stem(k, 0.008, 0.006, d + 0.05, '#3f7a28', '#6fae3a', M(0, 0.01, 0, 1.25, az, 0)); leaf(k, 0.12 * f + 0.04, 0.11 * f + 0.03, 1.3, ...G.light, M(Math.sin(az) * d, 0.05, Math.cos(az) * d, 0.3, az + Math.PI, 0), { lobed: true, round: 0.45 }); }
-    if (st >= 3) { const r = st === 5 ? 0.17 : st === 4 ? 0.11 : 0.06, g = new THREE.SphereGeometry(r, k.seg(16, 10), k.seg(10, 6)), p = g.attributes.position; for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i), a = Math.atan2(z, x), m = 1 + 0.08 * Math.cos(a * 8); p.setXYZ(i, x * m, p.getY(i) * 0.72, z * m); } k.add(g, st === 5 ? '#c4500c' : st === 4 ? '#b4a83a' : '#5f9a3a', st === 5 ? '#ffa02e' : st === 4 ? '#e0d46a' : '#9fd05a', M(0.14, r * 0.68, 0.08)); stem(k, 0.012, 0.009, 0.06, '#4f6a2a', '#8a9a4a', M(0.14, r * 1.35, 0.08, 0, 0, 0.35)); }
+    // leaves stand on long stalks above the ground; the fruit lies on the soil out at the end of a creeping vine,
+    // green and streaked while unripe, deep orange when ready
+    for (let i = 0; i < 2 + st; i++) { const az = i / (2 + st) * 6.28, d = 0.14 * f; stem(k, 0.008, 0.006, d + 0.1, '#3f7a28', '#6fae3a', M(0, 0.01, 0, 0.9, az, 0)); leaf(k, 0.12 * f + 0.04, 0.11 * f + 0.03, 1.3, ...G.light, M(Math.sin(az) * d, 0.1 + 0.03 * f, Math.cos(az) * d, 0.25, az + Math.PI, 0), { lobed: true, round: 0.45 }); }
+    if (st >= 3) {
+      const r = st === 5 ? 0.17 : st === 4 ? 0.12 : 0.07, fx = 0.2 + r, fz = 0.06, g = new THREE.SphereGeometry(r, k.seg(16, 10), k.seg(10, 6)), p = g.attributes.position;
+      for (let i = 0; i < p.count; i++) { const x = p.getX(i), z = p.getZ(i), a = Math.atan2(z, x), m = 1 + 0.08 * Math.cos(a * 8); p.setXYZ(i, x * m, p.getY(i) * 0.72, z * m); }
+      stem(k, 0.01, 0.008, fx - r * 0.5, '#4f7a2a', '#7fa83a', M(0, 0.02, 0, 0, -Math.atan2(fz, fx), -Math.PI / 2 + 0.06));   // the vine along the ground
+      k.add(g, st === 5 ? '#c4500c' : st === 4 ? '#3f6a22' : '#4f8a2a', st === 5 ? '#ffa02e' : st === 4 ? '#a6b84a' : '#8fc45a', M(fx, r * 0.7, fz));
+      stem(k, 0.012, 0.009, 0.06, '#4f6a2a', '#8a9a4a', M(fx, r * 1.38, fz, 0, 0, 0.35));
+    }
   },
   cabbage(k, st, f) {
     rosette(k, 3 + st, 0.12 * f + 0.05, 0.08 * f + 0.03, 1.4, 0.95, '#2f8a3a', '#7fd05a', 0.01, { round: 0.5, fold: 0.15 });
