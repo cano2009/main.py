@@ -168,7 +168,7 @@ dd { margin: 0; text-align: right; font-family: var(--font-mono); font-size: 13p
       <button type="button" class="chip" data-part="belt">Belt</button><button type="button" class="chip" data-part="bturn">Right turn</button><button type="button" class="chip" data-part="bleft">Left turn</button><button type="button" class="chip" data-part="split">Splitter</button><button type="button" class="chip" data-part="merge">Merger</button><button type="button" class="chip" data-part="filter">Filter</button><button type="button" class="chip" data-part="sensor">Sensor</button><button type="button" class="chip" data-part="sawmill">Band sawmill</button><button type="button" class="chip" data-part="stonecutter">Stone cutter</button><button type="button" class="chip" data-part="smelter">Ore smelter</button><button type="button" class="chip" data-part="packer">Crate packer</button><button type="button" class="chip" data-part="bin">Supply bin</button><button type="button" class="chip" data-part="mill">Hammer mill</button><button type="button" class="chip" data-part="baler">Baler</button><button type="button" class="chip" data-part="splitter">Log splitter</button><button type="button" class="chip" data-part="pallet">Sales pallet</button><button type="button" class="chip" data-part="remove">Remove parts</button>
     </div>
     <div class="chips" role="group" aria-label="Game"><span class="label">Game</span>
-      <button type="button" class="chip" id="save-now">Save</button><button type="button" class="chip" id="new-game">New farm</button>
+      <button type="button" class="chip" id="save-now">Save</button><button type="button" class="chip" id="new-game">New farm</button><button type="button" class="chip" id="adv-tools"></button>
     </div>
     <div class="chips" role="group" aria-label="Physics"><span class="label">Physics</span>
       <button type="button" class="chip" id="p-crate">Drop a crate</button><button type="button" class="chip" id="p-pumpkins">Drop pumpkins</button><button type="button" class="chip" id="p-barrel">Roll a barrel</button>
@@ -211,6 +211,12 @@ const $ = (id) => document.getElementById(id);
 const V = THREE.Vector3;
 const lin = (h) => new THREE.Color(h).convertSRGBToLinear();
 const qs = new URLSearchParams(location.search);
+// Basic farming first: field, crops, tractor and implements, trailer, truck, water, the packing line that sells the
+// harvest and the power that runs them. The advanced tools (parts factory, bakery chain, production core, workshop,
+// digester, soil steward, controller) stay in the game, switched off, until the player turns them on.
+let ADV_ON = false; try { ADV_ON = localStorage.getItem('fieldworks.advanced') === '1'; } catch (e) { /* storage blocked */ }
+if (qs.has('advanced')) ADV_ON = qs.get('advanced') !== '0';
+const BASIC = !ADV_ON, ADV_KEYS = ['parts', 'core', 'workshop', 'steward', 'digester', 'chain', 'logic'];
 let envMats = null, lastDay = -1;
 const AUDIT = qs.has('audit'); if (AUDIT) BAKE.enabled = false;   // audit: keep every part separate so the checks can see it            // materials whose reflections dim at night (see dimReflections)
 
@@ -606,6 +612,10 @@ function detachImpl(name) {
   const sl = SLOTS[name], da = Math.abs(((m.root.rotation.y - Math.PI / 2 + Math.PI * 3) % (Math.PI * 2)) - Math.PI);
   if (sl && Math.hypot(m.root.position.x - sl.x, m.root.position.z - sl.z) < 0.8 && da < 0.5) { m.root.position.x = sl.x; m.root.position.z = sl.z; m.root.rotation.y = Math.PI / 2; }
 }
+if (BASIC) {   // basic farming: cables and pipes to the advanced machines are left out before the merge
+  const adv = new Set([dgm, stw, lc, bay, coreB, mil, ovn, bag].map((m) => m.root)), isAdv = (o) => { for (let a = o; a; a = a.parent) if (adv.has(a) || a === chainG) return true; return false; };
+  MODELS.forEach((m) => (m.ports || []).forEach((pt) => pt.links.forEach((L) => { if (L.mesh && L.mesh.parent && (isAdv(L.a.owner.root) || isAdv(L.b.owner.root))) L.mesh.parent.remove(L.mesh); })));
+}
 scene.add(mergeByMaterial(wireG)); { const pm = mergeByMaterial(pipeG); stylize(pm); scene.add(pm); }
 // ---------- workshop: the built machine (solid, wired to the pedestal) and the draft (blueprint) ----------
 const wsG = new THREE.Group(); wsG.position.copy(WS_POS); wsG.rotation.y = WS_ROT; scene.add(wsG);
@@ -671,7 +681,7 @@ const pgrid = new PW.PartGrid(); let partsKw = 0;
 const core = new CR.CoreSim(); core.bays[1] = 'press'; core.bays[4] = 'bottler';   // a starter line: press and bottler
 chain.core = core;
 // the sorter's diverter: crops the core wants go out to the router, grain goes up to the mill, the rest is packed
-lineSim.divert = (crop, it) => (core.wants(crop) ? chain.accept(crop, 'core', it && it.grade) : CROPS[crop].grain ? chain.accept(crop, 'mill') : false);
+lineSim.divert = (crop, it) => BASIC ? false : (core.wants(crop) ? chain.accept(crop, 'core', it && it.grade) : CROPS[crop].grain ? chain.accept(crop, 'mill') : false);
 const steward = new StewardSim({ dock: { x: STW_POS.x + stw.dockAt.x, z: STW_POS.z + stw.dockAt.z }, gate: { x: GATE_E.x, z: GATE_E.z } });
 const rejectFx = [];
 lineSim.onReject = (it) => { digester.accept(it.crop); rejectFx.push({ crop: it.crop, t: 0 }); };
@@ -955,7 +965,7 @@ function drawScreens() {
 }
 
 // ---------- UI ----------
-const KEYS = ['overview', 'network', 'parts', 'core', 'workshop', 'field', 'steward', 'tractor', 'line', 'digester', 'chain', 'logic', 'drone', 'pump', 'tank', 'wind', 'solar', 'gen', 'grid', 'truck'];
+const KEYS = ['overview', 'network', 'parts', 'core', 'workshop', 'field', 'steward', 'tractor', 'line', 'digester', 'chain', 'logic', 'drone', 'pump', 'tank', 'wind', 'solar', 'gen', 'grid', 'truck'].filter((k) => !BASIC || !ADV_KEYS.includes(k));
 const NAMES = { overview: 'Whole yard', wind: 'Wind turbine', solar: 'Solar array', tank: 'Water tank', pump: 'Pump jack', drone: 'Spray drone', gen: 'Generator', grid: 'Power network', truck: 'Truck', field: 'Crop field', line: 'Processing line', tractor: 'Tractor', chain: 'Bakery chain', digester: 'Digester', steward: 'Soil steward', logic: 'Controller', network: 'Diagnostics', workshop: 'Workshop', core: 'Production core', parts: 'Power and belts' };
 $('picker').innerHTML = KEYS.map((k) => `<button type="button" class="pick" id="pick-${k}" aria-pressed="${k === 'overview'}">${k === 'overview' ? '' : `<span class="dot" id="dot-${k}"></span>`}${NAMES[k]}</button>`).join('');
 fieldSim.act = (id, w) => {
@@ -1495,7 +1505,7 @@ function rebuildCoreMods() {
   core.bays.forEach((b, k) => {
     const cur = coreMods[k]; if (cur && cur.type === b) return;
     if (cur) { scene.remove(cur.root); KEY_OF.delete(cur.root); }
-    const m = CR.moduleModel(b); m.type = b; m.root.position.set(CORE_X, 0, BAY_Z(k)); stylize(m.root); scene.add(m.root); KEY_OF.set(m.root, 'core'); outlines.register(m.root); coreMods[k] = m;
+    const m = CR.moduleModel(b); m.type = b; m.root.position.set(CORE_X, 0, BAY_Z(k)); stylize(m.root); scene.add(m.root); KEY_OF.set(m.root, 'core'); outlines.register(m.root); coreMods[k] = m; if (BASIC) m.root.visible = false;
   });
 }
 rebuildCoreMods();
@@ -1879,18 +1889,34 @@ function applySave(s) {
 }
 // starter builds east of the workshop: (A) motor, shaft and hammer mill fed from a grain bin; (B) a wind rotor through a
 // step-up gearbox driving a hydraulic pump, an accumulator and a baler fed from a straw bin. Remove or rebuild them freely.
-[['motor', 16, 18, 0], ['shaft', 17, 18, 0], ['mill', 18, 18, 0], ['bin', 18, 17, 1, { mat: 'grain', supply: 40 }], ['belt', 18, 19, 1], ['pallet', 18, 20, 0],
+if (!BASIC) [['motor', 16, 18, 0], ['shaft', 17, 18, 0], ['mill', 18, 18, 0], ['bin', 18, 17, 1, { mat: 'grain', supply: 40 }], ['belt', 18, 19, 1], ['pallet', 18, 20, 0],
  ['wind', 20, 18, 0], ['stepup', 21, 18, 0], ['pump', 22, 18, 0], ['accum', 23, 18, 0], ['baler', 24, 18, 0], ['bin', 24, 17, 1, { mat: 'straw', supply: 40 }], ['belt', 24, 19, 1], ['pallet', 24, 20, 0]].forEach(([t, i, j, r, st]) => placePart(t, i, j, r, st));
 // starter factory in the west yard: (C) logs through the band sawmill into the crate packer; (D) ore through the smelter
 // into a splitter; (E) stone through the cutter past a counting sensor and a left turn; (F) grain and straw merged, then
 // sorted again by a filter. Every piece can be moved, turned or removed.
-[['bin', -23, 1, 0, { mat: 'log', supply: 40 }], ['belt', -22, 1, 0], ['sawmill', -21, 1, 0], ['belt', -19, 1, 0], ['packer', -18, 1, 0], ['pallet', -16, 1, 0],
+if (!BASIC) [['bin', -23, 1, 0, { mat: 'log', supply: 40 }], ['belt', -22, 1, 0], ['sawmill', -21, 1, 0], ['belt', -19, 1, 0], ['packer', -18, 1, 0], ['pallet', -16, 1, 0],
  ['bin', -23, 4, 0, { mat: 'ore', supply: 40 }], ['belt', -22, 4, 0], ['smelter', -21, 4, 0], ['split', -19, 4, 0], ['pallet', -19, 3, 0], ['pallet', -19, 5, 0],
  ['bin', -23, 7, 0, { mat: 'stone', supply: 40 }], ['belt', -22, 7, 0], ['stonecutter', -21, 7, 0], ['sensor', -19, 7, 0], ['bleft', -18, 7, 0], ['pallet', -18, 6, 0],
  ['bin', -23, 10, 0, { mat: 'grain', supply: 40 }], ['belt', -22, 10, 0], ['merge', -21, 10, 0], ['bin', -21, 11, 3, { mat: 'straw', supply: 40 }], ['filter', -20, 10, 0, { fmat: 'straw' }], ['pallet', -20, 11, 0], ['belt', -19, 10, 0], ['bturn', -18, 10, 0], ['pallet', -18, 11, 0]].forEach(([t, i, j, r, st]) => placePart(t, i, j, r, st));
 const saved = AUDIT || qs.has('fresh') ? null : readSave();
 if (saved) { try { applySave(saved); wsRebuildBuilt(); wsRefreshDraft(); setTimeout(() => toast('Saved farm loaded'), 300); } catch (e) { console.warn('Save could not be applied', e); } }
 else { placeBuilding('barn', -16, 12, Math.PI / 2); wsRefreshDraft(); }
+// ---------- basic mode: hide the advanced machines, their cables and build chips, and switch their sims off ----------
+(function applyBasic() {
+  const b = $('adv-tools'); b.textContent = BASIC ? 'Advanced tools: off' : 'Advanced tools: on'; b.setAttribute('aria-pressed', String(!BASIC));
+  b.onclick = () => { save(); try { localStorage.setItem('fieldworks.advanced', BASIC ? '1' : '0'); } catch (e) { /* ignore */ } location.search = BASIC ? '?advanced=1' : '?advanced=0'; };
+  if (!BASIC) return;
+  const hide = new Set([chainG, coreB.root, dgm.root, stw.root, rov.root, lc.root, bay.root, wsG]);
+  KEY_OF.forEach((k, root) => { if (ADV_KEYS.includes(k)) hide.add(root); });
+  hide.forEach((r) => { if (r) r.visible = false; });
+  const under = (o) => { for (let a = o; a; a = a.parent) if (hide.has(a)) return true; return false; };
+  // cables and pipes that end at a hidden machine
+  [mil, ovn, bag].forEach((m) => { m.root.visible = false; });
+  const shown = (o) => { for (let a = o; a; a = a.parent) if (!a.visible) return false; return true; };
+  MODELS.forEach((m) => (m.ports || []).forEach((pt) => pt.links.forEach((L) => { if (L.mesh && !(shown(L.a.owner.root) && shown(L.b.owner.root))) L.mesh.visible = false; })));
+  document.querySelectorAll('[data-part]').forEach((c) => { const g = c.closest('.chips'); if (g) g.hidden = true; });
+  steward.auto = false; logic.on = false; core.on = false; custom.on = false;
+})();
 setInterval(save, 30000); addEventListener('visibilitychange', () => { if (document.hidden) save(); });
 $('save-now').onclick = () => toast(save() ? 'Farm saved' : 'Saving is not available here');
 $('new-game').onclick = () => { if (!confirm('Start a new farm? The saved one is deleted.')) return; try { localStorage.removeItem(SAVE_KEY); localStorage.removeItem(SAVE_KEY + '.bak'); } catch (e) { /* ignore */ } location.reload(); };
@@ -1990,7 +2016,7 @@ function animateInteract(dt) {
     if (k >= 1) { P.root.scale.setScalar(P.s0); scene.remove(P.ring); P.ring.geometry.dispose(); P.ring.material.dispose(); POPS.splice(i, 1); }
   }
 }
-window.__fw = { partModels, popIn, pickUpPart, pickUpBuilding, showHint, hoverInfo, pgrid, PW, startPart, placePart, partsSim, canPlacePart, core, CR, coreMods, rebuildCoreMods, rt, custom, DS, bay, wsRebuildBuilt, wsRefreshDraft, ws: () => ({ wsBuilt, wsDraft, wsLink }), digester, steward, logic, rov, stw, dgm, lc, diagnose, setSoil: (m) => document.querySelector(`[data-soil="${m}"]`).click(), tractorSim, chain, placed, startBuild, moveGhost, confirmBuild, BUILD, save, readSave, IMPL, trac, runAudit, net, MODELS, lineSim, fieldSim, buildFieldMeshes, tr, camera, controls, wind, solar, tank, pump, drone, grid, gsim, field, props, chassis, vehicle, select, openInspect, frame, render, setTab: (t) => $('tab-' + t).click(), doAction, setHour: (h) => { hour = h; updateEnv(); }, setWind: (w) => { windBase = w; }, setWeather: (w) => { weather = w; }, setSpeed: (s) => { speed = s; }, step: (secs, sp) => { const s0 = speed; speed = sp || 1; for (let i = 0; i < secs * 30; i++) frame(1 / 30); speed = s0; }, drive, setDriving, gfx };
+window.__fw = { ray, MODELS, partModels, popIn, pickUpPart, pickUpBuilding, showHint, hoverInfo, pgrid, PW, startPart, placePart, partsSim, canPlacePart, core, CR, coreMods, rebuildCoreMods, rt, custom, DS, bay, wsRebuildBuilt, wsRefreshDraft, ws: () => ({ wsBuilt, wsDraft, wsLink }), digester, steward, logic, rov, stw, dgm, lc, diagnose, setSoil: (m) => document.querySelector(`[data-soil="${m}"]`).click(), tractorSim, chain, placed, startBuild, moveGhost, confirmBuild, BUILD, save, readSave, IMPL, trac, runAudit, net, MODELS, lineSim, fieldSim, buildFieldMeshes, tr, camera, controls, wind, solar, tank, pump, drone, grid, gsim, field, props, chassis, vehicle, select, openInspect, frame, render, setTab: (t) => $('tab-' + t).click(), doAction, setHour: (h) => { hour = h; updateEnv(); }, setWind: (w) => { windBase = w; }, setWeather: (w) => { weather = w; }, setSpeed: (s) => { speed = s; }, step: (secs, sp) => { const s0 = speed; speed = sp || 1; for (let i = 0; i < secs * 30; i++) frame(1 / 30); speed = s0; }, drive, setDriving, gfx };
 const clock = new THREE.Clock();
 function loop() {
   const dt = Math.min(clock.getDelta(), 0.05);
