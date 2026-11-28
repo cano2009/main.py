@@ -80,6 +80,22 @@ dd { margin: 0; text-align: right; font-family: var(--font-mono); font-size: 13p
 .toast.show { opacity: 1; }
 .phint { position: absolute; z-index: 6; pointer-events: none; background: rgba(14,17,21,0.92); border: 1px solid #39414b; border-radius: 8px; padding: 7px 10px 8px; font-size: 12px; line-height: 1.5; color: #e9edf1; box-shadow: 0 6px 18px rgba(0,0,0,0.35); opacity: 0; transition: opacity 0.12s; max-width: 260px; }
 .phint.show { opacity: 1; }
+.guide { position: absolute; left: 10px; top: 46px; z-index: 5; width: 236px; background: rgba(21,18,13,0.88); border: 1px solid var(--line); border-radius: 10px; padding: 9px 10px 10px; font-size: 12px; color: var(--fg); }
+.guide.min .body { display: none; }
+.guide .hd { display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.guide .hd button { background: none; border: 0; color: var(--muted); font-size: 14px; cursor: pointer; padding: 0 2px; }
+.guide .steps { display: flex; gap: 3px; margin: 7px 0 8px; }
+.guide .steps span { flex: 1; text-align: center; padding: 3px 0; border-radius: 5px; background: #2a2318; color: var(--muted); font-size: 10.5px; }
+.guide .steps span.now { background: #e8b923; color: #15120d; font-weight: 700; }
+.guide .steps span.done { background: #2f5a3b; color: #cfe9d4; }
+.guide .msg { font-size: 13px; font-weight: 600; margin-bottom: 3px; }
+.guide .sub { color: var(--muted); margin-bottom: 7px; line-height: 1.4; }
+.guide .bar { height: 6px; border-radius: 3px; background: #2a2318; overflow: hidden; margin-bottom: 8px; }
+.guide .bar i { display: block; height: 100%; background: #3fd27a; }
+.guide .acts { display: flex; gap: 5px; flex-wrap: wrap; }
+.guide .acts button { flex: 1 1 auto; min-height: 30px; border-radius: 7px; border: 1px solid var(--line); background: #2a2318; color: var(--fg); font: 600 12px inherit; cursor: pointer; padding: 4px 8px; }
+.guide .acts button.go { background: #e8b923; border-color: #e8b923; color: #15120d; }
+@media (max-width: 640px) { .guide { width: 200px; font-size: 11px; } }
 .phint .t { font-weight: 700; font-size: 13px; }
 .phint .s { color: #a9b3bd; margin-bottom: 4px; }
 .phint .row { display: flex; gap: 10px; flex-wrap: wrap; }
@@ -105,6 +121,7 @@ dd { margin: 0; text-align: right; font-family: var(--font-mono); font-size: 13p
     <div class="viewport" id="viewport">
       <span class="chip-status"><span class="dot" id="st-dot"></span><span id="st-text">Starting</span></span>
       <span class="clock" id="clock">12:00</span>
+      <div class="guide" id="guide" hidden><div class="hd"><span>Farm guide</span><button type="button" id="guide-min" aria-label="Minimise the farm guide">–</button></div><div class="body"><div class="steps" id="g-steps"></div><div class="msg" id="g-msg"></div><div class="sub" id="g-sub"></div><div class="bar" id="g-barw"><i id="g-bar"></i></div><div class="acts" id="g-acts"></div></div></div>
       <div class="toast" id="toast" role="status"></div>
       <span class="hint" id="hint">Drag to look around · tap a machine to inspect it · tap a crate, barrel or pumpkin to push it</span>
       <div class="pad" id="pad" hidden>
@@ -1919,6 +1936,57 @@ else { placeBuilding('barn', -16, 12, Math.PI / 2); wsRefreshDraft(); }
   MODELS.forEach((m) => (m.ports || []).forEach((pt) => pt.links.forEach((L) => { if (L.mesh && !(shown(L.a.owner.root) && shown(L.b.owner.root))) L.mesh.visible = false; })));
   document.querySelectorAll('[data-part]').forEach((c) => { const g = c.closest('.chips'); if (g) g.hidden = true; });
   steward.auto = false; logic.on = false; core.on = false; custom.on = false;
+})();
+// ---------- farm guide: the season as five steps, the field's state, and the next job a tap away ----------
+(function farmGuide() {
+  const el = $('guide'); el.hidden = false;
+  let min = false; try { min = localStorage.getItem('fieldworks.guideMin') === '1'; } catch (e) { /* ignore */ }
+  const setMin = (v) => { min = v; el.classList.toggle('min', v); $('guide-min').textContent = v ? '+' : '–'; try { localStorage.setItem('fieldworks.guideMin', v ? '1' : '0'); } catch (e) { /* ignore */ } };
+  setMin(min); $('guide-min').onclick = () => setMin(!min);
+  if (BASIC && !saved) fieldSim.autoFarm = false;   // a new basic farm: the player starts each job; auto farming is one tap away
+  const STEPS = ['Plow', 'Sow', 'Grow', 'Harvest', 'Sell'];
+  const job = (j) => { if (tractorSim.startJob(j, fieldSim)) { toast({ plow: 'The tractor heads out to plow', seed: `The tractor heads out to sow ${CROPS[fieldSim.next].name.toLowerCase()}`, harvest: 'The tractor heads out to harvest' }[j]); draw(true); } else toast('The tractor is busy'); };
+  const fast = () => { const want = speed >= 60 ? 1 : 60; const b = document.querySelector(`[data-speed="${want}"]`); if (b) b.click(); else speed = want; draw(true); };
+  const cropCycle = () => { const L = Object.keys(CROPS), k = (L.indexOf(fieldSim.next) + 1) % L.length; fieldSim.next = L[k]; draw(true); };
+  let last = '';
+  function draw(force) {
+    const T = tractorSim, F = fieldSim, C = CROPS[F.next], busy = T.state !== 'parked';
+    let step, msg, sub, bar = null; const acts = [];
+    const fastBtn = (go) => acts.push(['fast', speed >= 60 ? 'Normal speed' : 'Fast-forward', go]);
+    if (busy) {
+      step = T.job === 'plow' ? 0 : T.job === 'seed' ? 1 : T.job === 'harvest' ? 3 : 2;
+      msg = { plow: 'Plowing the field', seed: `Sowing ${C.name.toLowerCase()}`, harvest: 'Harvesting' }[T.job] || 'The tractor is out';
+      sub = T.reason(); bar = T.job === 'plow' ? F.tilled() : T.job === 'seed' ? 1 - F.tilled() : T.job === 'harvest' ? 1 - F.ripe() : null;
+      fastBtn(false);
+    } else if (F.ripe() > 0.9) { step = 3; msg = `${CROPS[F.crop].name} is ready`; sub = 'Bring it in with the harvester. The trailer takes it to the packing line.'; acts.push(['harvest', 'Harvest', true]); }
+    else if (F.stubble() > 0.5) { step = 0; msg = 'Plow the stubble'; sub = 'Turn the old crop into the soil before sowing again.'; acts.push(['plow', 'Plow', true]); }
+    else if (F.tilled() > 0.5) { step = 1; msg = `Sow ${C.name.toLowerCase()}`; sub = `${C.growHours} h to grow, about $${C.value.toFixed(2)} a unit.`; acts.push(['seed', 'Sow', true], ['crop', 'Change crop', false]); }
+    else if (lineSim.status() === 'running' && F.growth() < 0.25) { step = 4; msg = 'Selling the harvest'; sub = `The packing line washes, sorts and boxes it. Sold so far: ${money(lineSim.earned)}.`; fastBtn(false); }
+    else {
+      step = 2; const g = F.growth(), w = F.wetness();
+      msg = `${CROPS[F.crop].name} growing: ${Math.round(g * 100)}%`; bar = g;
+      sub = w < 0.35 ? 'The soil is dry: send the drone to water it.' : 'Watered and growing. Speed time up to reach harvest sooner.';
+      if (w < 0.35) acts.push(['water', 'Water now', true]);
+      fastBtn(w >= 0.35);
+    }
+    acts.push(['auto', `Auto farming: ${F.autoFarm ? 'on' : 'off'}`, false]);
+    const key = [step, msg, sub, bar === null ? '' : Math.round(bar * 50), acts.map((a) => a[1]).join()].join('|');
+    if (!force && key === last) return; last = key;
+    $('g-steps').innerHTML = STEPS.map((t, i) => `<span class="${i === step ? 'now' : i < step ? 'done' : ''}">${t}</span>`).join('');
+    $('g-msg').textContent = msg; $('g-sub').textContent = sub;
+    $('g-barw').hidden = bar === null; if (bar !== null) $('g-bar').style.width = Math.round(Math.max(0, Math.min(1, bar)) * 100) + '%';
+    $('g-acts').innerHTML = acts.map(([id, t, go]) => `<button type="button" data-g="${id}" class="${go ? 'go' : ''}">${t}</button>`).join('');
+  }
+  $('g-acts').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-g]'); if (!b) return; const id = b.dataset.g;
+    if (id === 'plow' || id === 'seed' || id === 'harvest') job(id);
+    else if (id === 'crop') cropCycle();
+    else if (id === 'fast') fast();
+    else if (id === 'water') { drone.newMission(); toast('The drone takes off to water the field'); }
+    else if (id === 'auto') { fieldSim.autoFarm = !fieldSim.autoFarm; toast(fieldSim.autoFarm ? 'Auto farming on: the tractor starts each job when the field is ready' : 'Auto farming off: you start each job'); draw(true); }
+  });
+  draw(true); setInterval(() => draw(false), 400);
+  window.__guide = { draw, el };
 })();
 setInterval(save, 30000); addEventListener('visibilitychange', () => { if (document.hidden) save(); });
 $('save-now').onclick = () => toast(save() ? 'Farm saved' : 'Saving is not available here');
