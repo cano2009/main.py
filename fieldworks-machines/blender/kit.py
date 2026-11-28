@@ -57,7 +57,7 @@ def block(size, loc, m, bevel=0.02, rot=(0, 0, 0), name='block', segs=2):
     """Box of size (x, y, z) centred at loc (Blender is z-up; the exporter converts to y-up)."""
     bpy.ops.mesh.primitive_cube_add(size=1, location=loc, rotation=rot)
     o = bpy.context.object; o.name = name; o.scale = size
-    bpy.ops.object.transform_apply(scale=True)
+    bpy.ops.object.transform_apply(location=False, rotation=False, scale=True)   # keep the pivot at the part: later rotations turn it in place
     return _finish(o, m, min(bevel, min(size) * 0.45), segs)
 
 def cyl(r, depth, loc, m, axis='Z', verts=12, bevel=0.01, name='cyl', r2=None, rot=None):
