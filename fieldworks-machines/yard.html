@@ -1467,6 +1467,7 @@ MD.swap(wsh.root, 'models/hydrowash.glb').then((r) => { if (r) { washParts = r.p
 // power yard (mid-poly Blender models): the game keeps its screens, labels, LEDs, sockets, the battery fans, the breaker
 // handles and the tracker drive; the solar table node goes into the game's table group so it still tilts
 MD.swap(xf.root, 'models/py_transformer.glb');
+tk.rings.forEach((g, i) => MD.swap(g, i >= 2 ? 'models/fy_tankringc.glb' : 'models/fy_tankring.glb')); MD.swap(tk.roof, 'models/fy_tankroof.glb');   // each ring and the roof; upgrades still add rings
 MD.swap(pj.root, 'models/fy_pumpjack.glb', { attach: { beam: pj.moving.beam }, keep: (m) => under(m, pj.moving.keep) });   // the linkage stays the game's and keeps pumping
 MD.swap(bess.root, 'models/py_bess.glb', { keep: (m) => under(m, bess.fans) });
 MD.swap(dp.root, 'models/py_panel.glb', { keep: (m) => under(m, Object.values(dp.breakers).map((b) => b.handle)) });
