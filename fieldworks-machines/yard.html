@@ -558,7 +558,9 @@ const lay = (pa, pb, da, db, h, r, mat, parent) => {
   const pts = PT.groundRoute(pa, pb, da, db, h); if (!(h < 0) || pts.length < 6) return PT.tubePath(pts, r, mat, parent); const g = new THREE.Group(); parent.add(g); PT.tubePath(pts.slice(0, 3), r, mat, g); PT.tubePath(pts.slice(-3), r, mat, g); return g; };
 const cable = (a, b, h) => net.link(a, b, 'cable', (pa, pb, da, db) => lay(pa, pb, da, db, h, 0.03, Y.C.black, wireG));
 const pipe = (a, b, r, mat, h) => net.link(a, b, 'pipe', (pa, pb, da, db) => lay(pa, pb, da, db, h === undefined ? (r || 0.06) + 0.01 : h, r || 0.06, mat || Y.C.steel, pipeG));
-const span = (a, b, sag, r, mat) => a.forEach((p, i) => net.link(p, b[i], 'wire', (pa, pb) => Y.tube(Y.catenary(pa, pb, sag), r || 0.022, mat || Y.C.black, wireG, { seg: 16, radial: 4, noOutline: true })));
+// low-voltage spans are drawn as one bundled aerial cable (the three conductors twisted together) instead of three wires;
+// the network still links all three. The high-voltage line between the pylons (with a material) keeps its separate wires.
+const span = (a, b, sag, r, mat) => a.forEach((p, i) => net.link(p, b[i], 'wire', mat || i === 1 ? (pa, pb) => Y.tube(Y.catenary(pa, pb, sag), mat ? (r || 0.022) : 0.034, mat || Y.C.black, wireG, { seg: 16, radial: mat ? 4 : 6, noOutline: true }) : null));
 const WP = (m) => m.ports.filter((p) => p.type === "wire");
 // overhead network
 span(WP(pT), WP(pA), 0.5); span(WP(pS), WP(pA), 0.45); span(WP(pA), WP(pB), 0.6); span(WP(pB), WP(pC), 0.6); span(WP(pC), WP(pD), 0.45); span(WP(pB), WP(pE), 0.7); span(WP(pE), WP(pF), 0.6);
@@ -613,7 +615,7 @@ function detachImpl(name) {
   if (sl && Math.hypot(m.root.position.x - sl.x, m.root.position.z - sl.z) < 0.8 && da < 0.5) { m.root.position.x = sl.x; m.root.position.z = sl.z; m.root.rotation.y = Math.PI / 2; }
 }
 if (BASIC) {   // basic farming: cables and pipes to the advanced machines are left out before the merge
-  const adv = new Set([dgm, stw, lc, bay, coreB, mil, ovn, bag].map((m) => m.root)), isAdv = (o) => { for (let a = o; a; a = a.parent) if (adv.has(a) || a === chainG) return true; return false; };
+  const adv = new Set([dgm, stw, lc, bay, coreB, mil, ovn, bag, pF, pG].map((m) => m.root)), isAdv = (o) => { for (let a = o; a; a = a.parent) if (adv.has(a) || a === chainG) return true; return false; };
   MODELS.forEach((m) => (m.ports || []).forEach((pt) => pt.links.forEach((L) => { if (L.mesh && L.mesh.parent && (isAdv(L.a.owner.root) || isAdv(L.b.owner.root))) L.mesh.parent.remove(L.mesh); })));
 }
 scene.add(mergeByMaterial(wireG)); { const pm = mergeByMaterial(pipeG); stylize(pm); scene.add(pm); }
@@ -1912,6 +1914,7 @@ else { placeBuilding('barn', -16, 12, Math.PI / 2); wsRefreshDraft(); }
   const under = (o) => { for (let a = o; a; a = a.parent) if (hide.has(a)) return true; return false; };
   // cables and pipes that end at a hidden machine
   [mil, ovn, bag].forEach((m) => { m.root.visible = false; });
+  [pF, pG].forEach((p) => { p.root.visible = false; });   // these two poles only feed the advanced machines
   const shown = (o) => { for (let a = o; a; a = a.parent) if (!a.visible) return false; return true; };
   MODELS.forEach((m) => (m.ports || []).forEach((pt) => pt.links.forEach((L) => { if (L.mesh && !(shown(L.a.owner.root) && shown(L.b.owner.root))) L.mesh.visible = false; })));
   document.querySelectorAll('[data-part]').forEach((c) => { const g = c.closest('.chips'); if (g) g.hidden = true; });
