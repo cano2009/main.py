@@ -364,10 +364,28 @@ const nature = new THREE.Group(), grass = new THREE.Group();
 })();
 const natureMerged = mergeByMaterial(nature); stylize(natureMerged, { minSize: 0.3, thickness: 0.03 }); scene.add(natureMerged, mergeByMaterial(grass));
 // crop field: soil bed and ridges, plants drawn by growth stage (one instanced mesh per stage)
+// field soil: rounded planting ridges over a furrowed bed, a clod-and-crumb texture, and a colour that follows the soil
+// moisture (dark and rich when watered, pale and dusty when dry), so watering shows on the ground itself
+const SOIL_DRY = new THREE.Color('#a87a50').convertSRGBToLinear(), SOIL_WET = new THREE.Color('#4a2f1d').convertSRGBToLinear();
+const soilMats = [];
 { const W = FIELD.x1 - FIELD.x0, D = FIELD.z1 - FIELD.z0, cx = (FIELD.x0 + FIELD.x1) / 2, cz = (FIELD.z0 + FIELD.z1) / 2;
-  const soil = Y.box(W + 0.6, 0.1, D + 0.6, Y.flat('#7a5636', { roughness: 1 }), cx, 0.03, cz, scene); soil.castShadow = false;
-  const rows = Math.round(D / 0.5), g = []; for (let j = 0; j < rows; j++) g.push(new THREE.BoxGeometry(W, 0.1, 0.26).translate(cx, 0.1, FIELD.z0 + (j + 0.5) * D / rows));
-  const ridge = new THREE.Mesh(mergeBufferGeometries(g, false), Y.flat('#8a6340', { roughness: 1 })); ridge.receiveShadow = true; scene.add(ridge); }
+  const c = document.createElement('canvas'); c.width = c.height = 256; const g = c.getContext('2d');
+  let sd = 9; const rnd = () => (sd = (sd * 16807) % 2147483647) / 2147483647;
+  g.fillStyle = '#c4c4c4'; g.fillRect(0, 0, 256, 256);
+  for (let k = 0; k < 2600; k++) { const v = 150 + rnd() * 105 | 0; g.fillStyle = `rgb(${v},${v},${v})`; const r = 0.6 + rnd() * 2.4; g.beginPath(); g.arc(rnd() * 256, rnd() * 256, r, 0, 7); g.fill(); }
+  for (let k = 0; k < 160; k++) { const v = 90 + rnd() * 60 | 0; g.fillStyle = `rgba(${v},${v},${v},0.7)`; g.beginPath(); g.ellipse(rnd() * 256, rnd() * 256, 2 + rnd() * 4, 1.5 + rnd() * 3, rnd() * 3, 0, 7); g.fill(); }
+  const tex = new THREE.CanvasTexture(c); tex.wrapS = tex.wrapT = THREE.RepeatWrapping; tex.anisotropy = 8;
+  const mk = (rep) => { const t = tex.clone(); t.needsUpdate = true; t.repeat.set(rep[0], rep[1]); const m = new THREE.MeshStandardMaterial({ map: t, color: SOIL_DRY.clone().lerp(SOIL_WET, 0.5), roughness: 0.97 }); m.userData.lowpoly = true; soilMats.push(m); return m; };
+  const bed = new THREE.Mesh(new THREE.BoxGeometry(W + 0.6, 0.1, D + 0.6), mk([W / 1.5, D / 1.5])); bed.position.set(cx, 0.03, cz); bed.receiveShadow = true; scene.add(bed);
+  const rows = Math.round(D / 0.5), gs = [];
+  for (let j = 0; j < rows; j++) gs.push(new THREE.CylinderGeometry(0.17, 0.17, W, 10, 1, false, -Math.PI / 2, Math.PI).rotateZ(Math.PI / 2).scale(1, 0.55, 1).translate(cx, 0.075, FIELD.z0 + (j + 0.5) * D / rows));
+  const ridge = new THREE.Mesh(mergeBufferGeometries(gs, false), mk([W / 1.5, 1])); ridge.receiveShadow = true; scene.add(ridge);
+  const soilWet = () => {
+    const w = Math.min(1, fieldSim.wetness() * 1.25); soilMats.forEach((m) => m.color.copy(SOIL_DRY).lerp(SOIL_WET, w));
+    if (tilledMesh) { if (!tilledMesh.material.userData.clod) { tilledMesh.material = tilledMesh.material.clone(); tilledMesh.material.userData.clod = true; } tilledMesh.material.color.setScalar(1 - 0.5 * w); }   // clods darken with the soil
+  };
+  setInterval(soilWet, 500);
+}
 const fieldSim = new FieldSim(FIELD);
 let fieldMeshes = [], tilledMesh = null, meshCrop = null, meshLod = 1, fieldLod = 1;
 const fM4 = new THREE.Matrix4(), fQ = new THREE.Quaternion(), fS = new V(), fP = new V(), fC = new THREE.Color(), DRY = new THREE.Color(1.0, 0.84, 0.5), UP = new V(0, 1, 0);
@@ -1961,7 +1979,7 @@ else { placeBuilding('barn', -16, 12, Math.PI / 2); wsRefreshDraft(); }
     } else if (F.ripe() > 0.9) { step = 3; msg = `${CROPS[F.crop].name} is ready`; sub = 'Bring it in with the harvester. The trailer takes it to the packing line.'; acts.push(['harvest', 'Harvest', true]); }
     else if (F.stubble() > 0.5) { step = 0; msg = 'Plow the stubble'; sub = 'Turn the old crop into the soil before sowing again.'; acts.push(['plow', 'Plow', true]); }
     else if (F.tilled() > 0.5) { step = 1; msg = `Sow ${C.name.toLowerCase()}`; sub = `${C.growHours} h to grow, about $${C.value.toFixed(2)} a unit.`; acts.push(['seed', 'Sow', true], ['crop', 'Change crop', false]); }
-    else if (lineSim.status() === 'running' && F.growth() < 0.25) { step = 4; msg = 'Selling the harvest'; sub = `The packing line washes, sorts and boxes it. Sold so far: ${money(lineSim.earned)}.`; fastBtn(false); }
+    else if (lineSim.bin.length + lineSim.items.length > 0 && F.growth() < 0.25) { step = 4; msg = 'Selling the harvest'; sub = `The packing line washes, sorts and boxes it. Sold so far: ${money(lineSim.earned)}.`; fastBtn(false); }
     else {
       step = 2; const g = F.growth(), w = F.wetness();
       msg = `${CROPS[F.crop].name} growing: ${Math.round(g * 100)}%`; bar = g;
