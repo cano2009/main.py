@@ -158,8 +158,13 @@ function cereal(k, st, f, rice) {
 }
 function stageGeo(crop, st, lod) {
   const k = new Kit(st * 31 + crop.length * 7 + 3, lod, true);
-  if (st === 0) { soil(k); sphere(k, 0.016, '#c9b27a', '#efe0b0', M(0.015, 0.012, 0.01, 0, 0, 0, 1.4, 0.8, 1)); return k.build(); }
-  if (st === 1) { soil(k); stem(k, 0.004, 0.003, 0.05, '#4f8a2a', '#7fc04a'); [0, Math.PI].forEach((az) => leaf(k, 0.04, 0.022, 0.9, ...G.light, M(0, 0.045, 0, 0.9, az, 0), { seg: 3, round: 0.5 })); return k.build(); }
+  if (st === 0) { soil(k); sphere(k, 0.016, '#c9b27a', '#efe0b0', M(0.015, 0.012, 0.01, 0, 0, 0, 1.4, 0.8, 1)); stem(k, 0.005, 0.003, 0.03, '#6fae3a', '#a6dc5a', M(-0.01, 0.01, 0)); return k.build(); }   // seed just breaking the soil
+  if (st === 1) {   // sprout: a sturdy stem, two broad seed leaves and the first true leaf unfolding
+    soil(k); stem(k, 0.007, 0.005, 0.09, '#4f8a2a', '#8fd04a');
+    [0, Math.PI].forEach((az) => leaf(k, 0.075, 0.045, 0.7, ...G.light, M(0, 0.085, 0, 1.0, az, 0), { seg: 3, round: 0.55 }));
+    leaf(k, 0.06, 0.03, 0.4, ...G.green, M(0, 0.09, 0, 0.35, Math.PI / 2, 0), { seg: 3 });
+    return k.build();
+  }
   if (st === 6) { soil(k, true); if (/wheat|rice|corn|sunflower|cotton|soybean|tomato|eggplant|pepper|grape/.test(crop)) for (let i = 0; i < 6; i++) stem(k, 0.005, 0.005, 0.05 + k.r() * 0.04, '#9a7a3a', '#d6b46a', M(Math.cos(i * 1.1) * 0.05, 0, Math.sin(i * 1.1) * 0.05, 0.2, i, 0)); return k.build(); }
   const f = [0.35, 0.6, 0.82, 1][st - 2];
   GROW[crop](k, st, f);
